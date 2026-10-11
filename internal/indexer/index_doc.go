@@ -1,0 +1,40 @@
+package indexer
+
+import (
+	"fmt"
+
+	"github.com/blevesearch/bleve/v2"
+)
+
+// Index stores one document. A sensitive memory is never stored: it is removed
+// instead, so the index can never expose what the search must not reveal.
+func (i *Index) Index(doc Document) error {
+	if doc.Sensitive {
+		return i.Delete(doc.ID)
+	}
+	if err := i.index.Index(doc.ID, doc); err != nil {
+		return fmt.Errorf("index document %q: %w", doc.ID, err)
+	}
+	return nil
+}
+
+// Delete removes one document. Removing a document that is not stored is not an
+// error, because that is the state callers already want.
+func (i *Index) Delete(id string) error {
+	if err := i.index.Delete(id); err != nil {
+		return fmt.Errorf("remove document %q: %w", id, err)
+	}
+	return nil
+}
+
+// Has reports whether a document is stored.
+func (i *Index) Has(id string) (bool, error) {
+	request := bleve.NewSearchRequest(bleve.NewDocIDQuery([]string{id}))
+	request.Size = 0
+
+	result, err := i.index.Search(request)
+	if err != nil {
+		return false, fmt.Errorf("look up document %q: %w", id, err)
+	}
+	return result.Total > 0, nil
+}

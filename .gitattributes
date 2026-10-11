@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.sh whitespace=indent,trail,space,incomplete text eol=lf
+*.go text eol=lf diff=golang
+*.yml text eol=lf
+*.md text eol=lf
+Makefile text eol=lf

@@ -1,0 +1,19 @@
+/*
+
+# dirs
+!/.github/
+!/cmd/
+!/deployments/
+!/docs/
+!/internal/
+!/pkg/
+!/scripts/
+
+# files
+!/.gitattributes
+!/.gitignore
+!/go.mod
+!/go.sum
+!/LICENSE
+!/Makefile
+!/README.md

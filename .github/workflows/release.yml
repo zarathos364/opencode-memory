@@ -1,0 +1,55 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: package and release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # pin@v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # pin@7.0.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Test
+        run: make test
+
+      - name: Package every target
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            echo "::group::${goos}/${goarch}"
+            make clean
+            GOOS="$goos" GOARCH="$goarch" make package VERSION="$version"
+            echo "::endgroup::"
+          done
+
+      - name: Checksums
+        run: |
+          cd dist
+          for file in *.tar.gz; do
+            sha256sum "$file" > "$file.sha256"
+          done
+          sha256sum *.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          dist/*.tar.gz dist/*.sha256 dist/checksums.txt
+          --verify-tag
+          --title "$GITHUB_REF_NAME"

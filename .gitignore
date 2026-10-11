@@ -12,6 +12,8 @@
 # files
 !/.gitattributes
 !/.gitignore
+!/.golangci.yml
+!/AGENTS.md
 !/go.mod
 !/go.sum
 !/LICENSE

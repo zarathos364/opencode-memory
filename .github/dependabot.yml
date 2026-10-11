@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    target-branch: "main"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      golang-org:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    target-branch: "main"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    groups:
+      actions-core:
+        patterns:
+          - "actions/*"
+        update-types:
+          - "patch"

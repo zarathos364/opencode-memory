@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -432,5 +434,53 @@ func TestLockIsNotHeldBetweenCalls(t *testing.T) {
 	}
 	if err := svc.Close(); err != nil {
 		t.Fatalf("Close returned error: %v", err)
+	}
+}
+
+func TestTheStoreIsFreeWhileTheServerIdles(t *testing.T) {
+	root := storeRoot(t)
+	in, toServer := io.Pipe()
+	replies, toServerOut := io.Pipe()
+	done := make(chan error, 1)
+	go func() {
+		done <- (&Server{Root: root, Version: "test"}).Run(in, toServerOut)
+	}()
+
+	write := func(line string) {
+		t.Helper()
+		if _, err := io.WriteString(toServer, line+"\n"); err != nil {
+			t.Fatalf("write request: %v", err)
+		}
+	}
+	read := func() string {
+		t.Helper()
+		line, err := bufio.NewReader(replies).ReadBytes('\n')
+		if err != nil {
+			t.Fatalf("read reply: %v", err)
+		}
+		return resultText(t, string(line))
+	}
+
+	write(callLine(1, "add", `{"title":"Ferret care","content":"how to look after a ferret"}`))
+	read()
+
+	// Between two calls the server holds no lock, so the CLI can open the
+	// store while the server idles.
+	opened, err := service.New(root)
+	if err != nil {
+		t.Fatalf("opening the store between two calls failed: %v", err)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatalf("closing the store returned error: %v", err)
+	}
+
+	write(callLine(2, "search", `{"query":"ferret"}`))
+	read()
+
+	if err := toServer.Close(); err != nil {
+		t.Fatalf("closing the input returned error: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("Run returned error: %v", err)
 	}
 }

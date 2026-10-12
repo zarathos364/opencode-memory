@@ -11,7 +11,7 @@ GOCMD       ?= CGO_ENABLED=$(CGO_ENABLED) go
 # PACKAGE
 DIST          ?= $(CURDIR)/dist
 BINARY        := $(BINDIR)/$(BINNAME)
-PACKAGE_FILES ?= LICENSE
+PACKAGE_FILES ?= LICENSE README.md
 
 SRC := $(shell find . -type f -name '*.go' -print) go.mod go.sum
 

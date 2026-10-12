@@ -274,13 +274,14 @@ func TestCallsOnAClosedServiceAreRefused(t *testing.T) {
 	}
 
 	calls := map[string]func() error{
-		"Create":  func() error { _, err := svc.Create("title", "body", nil, false); return err },
-		"Get":     func() error { _, err := svc.Get("01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47"); return err },
-		"List":    func() error { _, err := svc.List(); return err },
-		"Search":  func() error { _, err := svc.Search("ferret", 10); return err },
-		"Delete":  func() error { return svc.Delete("01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47") },
-		"Update":  func() error { _, err := svc.Update("01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47", Patch{}); return err },
-		"Reindex": func() error { _, err := svc.Reindex(); return err },
+		"Create":     func() error { _, err := svc.Create("title", "body", nil, false); return err },
+		"Get":        func() error { _, err := svc.Get("0192f0c1-0000-7000-8000-000000000000"); return err },
+		"List":       func() error { _, err := svc.List(); return err },
+		"Search":     func() error { _, err := svc.Search("ferret", 10); return err },
+		"Delete":     func() error { return svc.Delete("0192f0c1-0000-7000-8000-000000000000") },
+		"Update":     func() error { _, err := svc.Update("0192f0c1-0000-7000-8000-000000000000", Patch{}); return err },
+		"Reindex":    func() error { _, err := svc.Reindex(); return err },
+		"Consistent": func() error { _, err := svc.Consistent(); return err },
 	}
 	for name, call := range calls {
 		if err := call(); err == nil || err.Error() != "service is closed" {

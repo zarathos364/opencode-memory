@@ -314,6 +314,9 @@ func (s *MemoryService) Reindex() (int, error) {
 // the store. Sensitive memories are stored but never indexed, so they are not
 // counted on either side.
 func (s *MemoryService) Consistent() (bool, error) {
+	if err := s.checkOpen(); err != nil {
+		return false, err
+	}
 	memories, err := s.reader.List()
 	if err != nil {
 		return false, err

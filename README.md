@@ -34,9 +34,11 @@ database server or a service. Each memory is a single `.md` file you can open
 in any editor and commit to git. A Bleve index sits next to the files and makes
 `search` fast, while `reindex` can rebuild it from the files at any moment.
 
-It fits into a project. The store lives in the `.opencode`
-directory. The tool finds the store automatically from any subdirectory.
-A stale configuration never starts a second store by accident.
+It serves one project and every project at once. By default the store lives
+in the `opencode` directory of your user configuration, so a single store
+covers every project you work on. A project that already holds a store keeps
+it, and the tool finds it from any subdirectory. A stale configuration never
+starts a second store by accident.
 
 ## Features
 
@@ -211,8 +213,11 @@ memories.
 
 Every command accepts `--root DIR`. Without it, the tool resolves the store
 in this order. It uses `OPENCODE_MEMORY_ROOT` when you set it. Otherwise it
-uses the closest `.opencode` directory above the working directory. When
-there is none, it uses `<working directory>/.opencode`.
+walks up to the closest `.opencode` directory that holds a `memories`
+directory. A project folder that only carries the `.opencode` name is a
+setting, not a store, so the walk up skips it. When no project store is
+found, the tool uses the `opencode` directory under `$XDG_CONFIG_HOME`, or
+under `$HOME/.config` when that variable is not set.
 
 The tool refuses an explicit root that does not exist, so a stale setting can
 never start a second store by accident. Only the automatic fallback resolves

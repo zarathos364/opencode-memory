@@ -29,8 +29,8 @@ func IndexDir(root string) string {
 
 // ResolveRoot picks the store location. An explicit value wins, then the
 // environment, then the closest ancestor that already holds a store, and finally
-// the starting directory. A root that was named but is missing is refused, so a
-// stale setting can never start a second store by accident.
+// the open code configuration directory. A root that was named but is missing is
+// refused, so a stale setting can never start a second store by accident.
 func ResolveRoot(explicit, startDir string) (string, error) {
 	if explicit != "" {
 		return existingDir(explicit, "--root")
@@ -39,16 +39,25 @@ func ResolveRoot(explicit, startDir string) (string, error) {
 		return existingDir(fromEnvironment, RootEnvVar)
 	}
 
+	// A project only counts as a store when it holds memories. A folder that
+	// merely carries the open code name is a setting, not a store, and skipping
+	// it is what lets one shared store serve every project.
 	for dir := startDir; ; {
-		candidate := filepath.Join(dir, OpenCodeDirName)
+		candidate := filepath.Join(dir, OpenCodeDirName, MemoriesDirName)
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return absolute(candidate)
+			return absolute(filepath.Join(dir, OpenCodeDirName))
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			break
 		}
 		dir = parent
+	}
+
+	// The configuration directory is $XDG_CONFIG_HOME when it is set and
+	// $HOME/.config otherwise, which is where a single store belongs.
+	if configDir, err := os.UserConfigDir(); err == nil {
+		return absolute(filepath.Join(configDir, OpenCodeDirName))
 	}
 	return absolute(filepath.Join(startDir, OpenCodeDirName))
 }

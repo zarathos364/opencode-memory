@@ -6,6 +6,17 @@ import (
 	"testing"
 )
 
+// storeAt creates a store that a walk up can recognise. The open code folder
+// only counts as a store once it holds memories.
+func storeAt(t *testing.T, base string) string {
+	t.Helper()
+	store := filepath.Join(base, OpenCodeDirName)
+	if err := os.MkdirAll(filepath.Join(store, MemoriesDirName), 0o755); err != nil {
+		t.Fatalf("creating the store failed: %v", err)
+	}
+	return store
+}
+
 func TestPathsAreBuiltFromTheRoot(t *testing.T) {
 	root := filepath.Join("some", OpenCodeDirName)
 
@@ -21,12 +32,10 @@ func TestPathsAreBuiltFromTheRoot(t *testing.T) {
 
 func TestResolveRootWalksUpToTheClosestStore(t *testing.T) {
 	t.Setenv(RootEnvVar, "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	base := t.TempDir()
-	store := filepath.Join(base, OpenCodeDirName)
-	if err := os.Mkdir(store, 0o755); err != nil {
-		t.Fatalf("creating the store failed: %v", err)
-	}
+	store := storeAt(t, base)
 	deep := filepath.Join(base, "one", "two")
 	if err := os.MkdirAll(deep, 0o755); err != nil {
 		t.Fatalf("creating the working folder failed: %v", err)
@@ -41,17 +50,35 @@ func TestResolveRootWalksUpToTheClosestStore(t *testing.T) {
 	}
 }
 
+func TestResolveRootSkipsAConfigurationFolderWithoutMemories(t *testing.T) {
+	t.Setenv(RootEnvVar, "")
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	base := t.TempDir()
+	// A project carrying the open code folder but no memories is a setting, not
+	// a store, so the shared store has to win over it.
+	if err := os.Mkdir(filepath.Join(base, OpenCodeDirName), 0o755); err != nil {
+		t.Fatalf("creating the configuration folder failed: %v", err)
+	}
+
+	got, err := ResolveRoot("", base)
+	if err != nil {
+		t.Fatalf("ResolveRoot returned error: %v", err)
+	}
+	want := filepath.Join(configHome, OpenCodeDirName)
+	if got != want {
+		t.Errorf("ResolveRoot = %q, want the configuration directory %q", got, want)
+	}
+}
+
 func TestResolveRootPrefersTheExplicitValue(t *testing.T) {
 	t.Setenv(RootEnvVar, "")
 
 	explicit := t.TempDir()
-	if err := os.Mkdir(filepath.Join(explicit, OpenCodeDirName), 0o755); err != nil {
-		t.Fatalf("creating the store failed: %v", err)
-	}
+	storeAt(t, explicit)
 	start := t.TempDir()
-	if err := os.Mkdir(filepath.Join(start, OpenCodeDirName), 0o755); err != nil {
-		t.Fatalf("creating the store failed: %v", err)
-	}
+	storeAt(t, start)
 
 	got, err := ResolveRoot(explicit, start)
 	if err != nil {
@@ -85,8 +112,41 @@ func TestResolveRootRefusesAPathThatDoesNotExist(t *testing.T) {
 	}
 }
 
-func TestResolveRootFallsBackToTheWorkingDirectory(t *testing.T) {
+func TestResolveRootFallsBackToTheConfigurationDirectory(t *testing.T) {
 	t.Setenv(RootEnvVar, "")
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	got, err := ResolveRoot("", t.TempDir())
+	if err != nil {
+		t.Fatalf("ResolveRoot returned error: %v", err)
+	}
+	want := filepath.Join(configHome, OpenCodeDirName)
+	if got != want {
+		t.Errorf("ResolveRoot = %q, want the configuration directory %q", got, want)
+	}
+}
+
+func TestResolveRootUsesTheHomeConfigurationDirectory(t *testing.T) {
+	t.Setenv(RootEnvVar, "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	got, err := ResolveRoot("", t.TempDir())
+	if err != nil {
+		t.Fatalf("ResolveRoot returned error: %v", err)
+	}
+	want := filepath.Join(home, ".config", OpenCodeDirName)
+	if got != want {
+		t.Errorf("ResolveRoot = %q, want the home configuration directory %q", got, want)
+	}
+}
+
+func TestResolveRootFallsBackToTheWorkingDirectoryWithoutAHome(t *testing.T) {
+	t.Setenv(RootEnvVar, "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "")
 
 	start := t.TempDir()
 	got, err := ResolveRoot("", start)
@@ -95,6 +155,6 @@ func TestResolveRootFallsBackToTheWorkingDirectory(t *testing.T) {
 	}
 	want := filepath.Join(start, OpenCodeDirName)
 	if got != want {
-		t.Errorf("ResolveRoot = %q, want the fallback %q", got, want)
+		t.Errorf("ResolveRoot = %q, want the last fallback %q", got, want)
 	}
 }

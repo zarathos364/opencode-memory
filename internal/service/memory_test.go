@@ -3,6 +3,7 @@ package service
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/zarathos364/opencode-memory/internal/storage"
@@ -289,6 +290,53 @@ func TestCallsOnAClosedServiceAreRefused(t *testing.T) {
 
 	if err := svc.Close(); err != nil {
 		t.Errorf("second Close returned error: %v, want closing twice to be safe", err)
+	}
+}
+
+func TestSearchSkipsAMemoryThatBecameSensitive(t *testing.T) {
+	svc, _ := newService(t)
+
+	created, err := svc.Create("ferret care", "how to look after a ferret", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	// Mark the file sensitive without touching the index, which is what a hand
+	// edit leaves behind.
+	created.Sensitive = true
+	if err := svc.writer.Replace(created); err != nil {
+		t.Fatalf("Replace returned error: %v", err)
+	}
+
+	results, err := svc.Search("ferret", 10)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("search returned %d results, want none for a sensitive memory", len(results))
+	}
+}
+
+func TestCreateNamesTheIdWhenTheIndexFails(t *testing.T) {
+	root := filepath.Join(t.TempDir(), storage.OpenCodeDirName)
+	svc, err := New(root)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+	// Close the index behind the service, so the next index write fails while
+	// the service still looks open. No cleanup follows: the index is closed.
+	if err := svc.index.Close(); err != nil {
+		t.Fatalf("closing the index returned error: %v", err)
+	}
+
+	created, err := svc.Create("ferret care", "how to look after a ferret", nil, false)
+	if err == nil {
+		t.Fatal("Create returned nil error, want the index failure")
+	}
+	if created == nil || created.ID == "" {
+		t.Fatal("Create returned no memory with the assigned id")
+	}
+	if !strings.Contains(err.Error(), created.ID) {
+		t.Errorf("error = %q, want it to name the id %q", err, created.ID)
 	}
 }
 

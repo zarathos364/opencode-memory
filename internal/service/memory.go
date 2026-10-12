@@ -174,7 +174,7 @@ func (s *MemoryService) Create(title, content string, tags []string, sensitive b
 		return nil, err
 	}
 	if err := s.index.Index(toDocument(m)); err != nil {
-		return m, fmt.Errorf("memory stored but not searchable, run reindex: %w", err)
+		return m, fmt.Errorf("memory %s stored but not searchable, run reindex: %w", m.ID, err)
 	}
 	return m, nil
 }
@@ -194,7 +194,8 @@ func (s *MemoryService) List() ([]*storage.Memory, error) {
 }
 
 // Search returns the best matches, strongest first. A hit whose file is gone is
-// skipped, because a stale index entry must not fail the whole search.
+// skipped, because a stale index entry must not fail the whole search, and a hit
+// whose memory is now sensitive is skipped too, so a stale entry cannot leak it.
 func (s *MemoryService) Search(query string, limit int) ([]Result, error) {
 	if err := s.checkOpen(); err != nil {
 		return nil, err
@@ -208,6 +209,11 @@ func (s *MemoryService) Search(query string, limit int) ([]Result, error) {
 	for _, hit := range hits {
 		m, err := s.reader.Get(hit.ID)
 		if err != nil {
+			continue
+		}
+		// A memory marked sensitive after its index entry was written must not
+		// come back through a stale entry.
+		if m.Sensitive {
 			continue
 		}
 		results = append(results, Result{Memory: m, Score: hit.Score})

@@ -55,11 +55,6 @@ func (s *MemoryService) Close() error {
 	return s.index.Close()
 }
 
-// IndexDir is the directory whose removal lets the index be built again.
-func (s *MemoryService) IndexDir() string {
-	return s.indexDir
-}
-
 // Create stores a new memory. The file is written first, so an index failure
 // leaves a memory that still exists and can be made searchable again later.
 func (s *MemoryService) Create(title, content string, tags []string, sensitive bool) (*storage.Memory, error) {

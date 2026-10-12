@@ -265,3 +265,65 @@ func TestDeleteRefusesAnIdentifierThatIsNotAnIdentifier(t *testing.T) {
 		t.Error("Delete with a path returned nil error, want rejection")
 	}
 }
+
+func TestCallsOnAClosedServiceAreRefused(t *testing.T) {
+	svc, _ := newService(t)
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+
+	calls := map[string]func() error{
+		"Create":  func() error { _, err := svc.Create("title", "body", nil, false); return err },
+		"Get":     func() error { _, err := svc.Get("01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47"); return err },
+		"List":    func() error { _, err := svc.List(); return err },
+		"Search":  func() error { _, err := svc.Search("ferret", 10); return err },
+		"Delete":  func() error { return svc.Delete("01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47") },
+		"Update":  func() error { _, err := svc.Update("01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47", Patch{}); return err },
+		"Reindex": func() error { _, err := svc.Reindex(); return err },
+	}
+	for name, call := range calls {
+		if err := call(); err == nil || err.Error() != "service is closed" {
+			t.Errorf("%s after Close returned %v, want the closed service reported", name, err)
+		}
+	}
+
+	if err := svc.Close(); err != nil {
+		t.Errorf("second Close returned error: %v, want closing twice to be safe", err)
+	}
+}
+
+func TestFailedReindexLeavesTheServiceClosed(t *testing.T) {
+	root := filepath.Join(t.TempDir(), storage.OpenCodeDirName)
+
+	svc, err := New(root)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(filepath.Join(root, storage.MemoriesDirName), 0o755); err != nil {
+			t.Errorf("restoring permissions failed: %v", err)
+		}
+		if err := svc.Close(); err != nil {
+			t.Errorf("Close returned error: %v", err)
+		}
+	})
+
+	if _, err := svc.Create("ferret care", "how to look after a ferret", nil, false); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	// Without write permission on the parent, removing the index directory
+	// fails, which strands the service exactly like a failed reopen would.
+	if err := os.Chmod(filepath.Join(root, storage.MemoriesDirName), 0o555); err != nil {
+		t.Fatalf("removing write permission failed: %v", err)
+	}
+	if _, err := svc.Reindex(); err == nil {
+		t.Fatal("Reindex without write permission returned nil error, want failure")
+	}
+
+	if _, err := svc.List(); err == nil || err.Error() != "service is closed" {
+		t.Errorf("List after a failed Reindex returned %v, want the closed service reported", err)
+	}
+	if err := svc.Close(); err != nil {
+		t.Errorf("Close after a failed Reindex returned error: %v, want no second close of the handle", err)
+	}
+}

@@ -2,6 +2,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -17,6 +18,9 @@ type MemoryService struct {
 	reader   *storage.Reader
 	index    *indexer.Index
 	indexDir string
+	// closed tells whether the index is still held. A failed Reindex sets it,
+	// so a later call reports a closed service instead of using a stale handle.
+	closed bool
 }
 
 // Result is one search hit together with its stored memory.
@@ -31,6 +35,15 @@ type Patch struct {
 	Content   *string
 	Tags      *[]string
 	Sensitive *bool
+}
+
+// AppendBody joins an addition to a stored body, separated by exactly one
+// newline. Commands and tools share it so the separator cannot drift apart.
+func AppendBody(current, addition string) string {
+	if !strings.HasSuffix(current, "\n") {
+		current += "\n"
+	}
+	return current + addition
 }
 
 // New opens the store under root and keeps the index locked until Close is called.
@@ -50,14 +63,30 @@ func New(root string) (*MemoryService, error) {
 	}, nil
 }
 
-// Close releases the index lock.
+// Close releases the index lock. Closing twice, or after a failed Reindex, is
+// safe: only the first call touches the handle.
 func (s *MemoryService) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
 	return s.index.Close()
+}
+
+// checkOpen refuses work on a service that no longer holds its index.
+func (s *MemoryService) checkOpen() error {
+	if s.closed {
+		return errors.New("service is closed")
+	}
+	return nil
 }
 
 // Create stores a new memory. The file is written first, so an index failure
 // leaves a memory that still exists and can be made searchable again later.
 func (s *MemoryService) Create(title, content string, tags []string, sensitive bool) (*storage.Memory, error) {
+	if err := s.checkOpen(); err != nil {
+		return nil, err
+	}
 	m, err := s.writer.Create(title, content, tags, sensitive)
 	if err != nil {
 		return nil, err
@@ -70,17 +99,26 @@ func (s *MemoryService) Create(title, content string, tags []string, sensitive b
 
 // Get loads one memory.
 func (s *MemoryService) Get(id string) (*storage.Memory, error) {
+	if err := s.checkOpen(); err != nil {
+		return nil, err
+	}
 	return s.reader.Get(id)
 }
 
 // List loads every memory in creation order.
 func (s *MemoryService) List() ([]*storage.Memory, error) {
+	if err := s.checkOpen(); err != nil {
+		return nil, err
+	}
 	return s.reader.List()
 }
 
 // Search returns the best matches, strongest first. A hit whose file is gone is
 // skipped, because a stale index entry must not fail the whole search.
 func (s *MemoryService) Search(query string, limit int) ([]Result, error) {
+	if err := s.checkOpen(); err != nil {
+		return nil, err
+	}
 	hits, err := s.index.Search(query, limit)
 	if err != nil {
 		return nil, err
@@ -100,6 +138,9 @@ func (s *MemoryService) Search(query string, limit int) ([]Result, error) {
 // Delete removes a memory. The file goes first, so an index failure leaves a
 // stale entry instead of a memory that cannot be recovered.
 func (s *MemoryService) Delete(id string) error {
+	if err := s.checkOpen(); err != nil {
+		return err
+	}
 	canonical, err := storage.CanonicalID(id)
 	if err != nil {
 		return err
@@ -112,6 +153,9 @@ func (s *MemoryService) Delete(id string) error {
 
 // Update rewrites a memory while keeping its identifier and its creation time.
 func (s *MemoryService) Update(id string, patch Patch) (*storage.Memory, error) {
+	if err := s.checkOpen(); err != nil {
+		return nil, err
+	}
 	m, err := s.reader.Get(id)
 	if err != nil {
 		return nil, err
@@ -141,16 +185,24 @@ func (s *MemoryService) Update(id string, patch Patch) (*storage.Memory, error) 
 
 // Reindex rebuilds the index from the stored files. It is the single way back
 // from a lost, damaged or drifted index, because the files are the source of truth.
+// When a step fails, the service is left closed: a later call reports that
+// instead of failing on a stale handle.
 func (s *MemoryService) Reindex() (int, error) {
+	if err := s.checkOpen(); err != nil {
+		return 0, err
+	}
 	if err := s.index.Close(); err != nil {
+		s.closed = true
 		return 0, err
 	}
 	if err := os.RemoveAll(s.indexDir); err != nil {
+		s.closed = true
 		return 0, fmt.Errorf("remove index: %w", err)
 	}
 
 	index, err := indexer.Open(s.indexDir)
 	if err != nil {
+		s.closed = true
 		return 0, err
 	}
 	s.index = index

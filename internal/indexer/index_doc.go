@@ -6,6 +6,7 @@ import (
 
 // Index stores one document. A sensitive memory is never stored: it is removed
 // instead, so the index can never expose what the search must not reveal.
+// Removal hides from search, not from forensics: old bytes linger until merge.
 func (i *Index) Index(doc Document) error {
 	if doc.Sensitive {
 		return i.Delete(doc.ID)

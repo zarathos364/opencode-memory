@@ -32,7 +32,8 @@ Commands:
   serve     expose the store to agents over MCP
 
 Every command accepts --root DIR to pick the store; otherwise the store is
-resolved automatically, falling back to the shared store.
+resolved automatically, falling back to the shared store. Pass -- before text
+that starts with a dash, so the text is not read as a flag.
 
 Run 'opencode-memory COMMAND --help' to see that command's options.
 
@@ -491,14 +492,20 @@ func indexFailure(root string, err error) error {
 	if _, statErr := os.Stat(dir); statErr != nil {
 		return fmt.Errorf("create the search index in %s: %w", dir, err)
 	}
-	return fmt.Errorf("open the search index in %s: %w (remove that directory to rebuild it)", dir, err)
+	return fmt.Errorf("open the search index in %s: %w (remove that directory and run reindex to rebuild it)", dir, err)
 }
 
 // warnIfOutOfSync reports a drifted index without failing the command, because the
-// stored files are still readable and can be reindexed at any moment.
+// stored files are still readable and can be reindexed at any moment. An index
+// that cannot even be checked gets the same warning, since that is exactly the
+// case the warning exists for.
 func warnIfOutOfSync(svc *service.MemoryService, errOut io.Writer) error {
 	consistent, err := svc.Consistent()
 	if err != nil {
+		_, err = fmt.Fprintln(errOut, "warning: the search index cannot be checked, run 'opencode-memory reindex'")
+		if err != nil {
+			return fmt.Errorf("write warning: %w", err)
+		}
 		return nil
 	}
 	if consistent {

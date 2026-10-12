@@ -185,8 +185,9 @@ func (s *MemoryService) Update(id string, patch Patch) (*storage.Memory, error) 
 
 // Reindex rebuilds the index from the stored files. It is the single way back
 // from a lost, damaged or drifted index, because the files are the source of truth.
-// When a step fails, the service is left closed: a later call reports that
-// instead of failing on a stale handle.
+// A failure closing, removing or reopening the index leaves the service closed.
+// A failure while re-adding leaves the fresh index partial but usable, and
+// Consistent reports the drift.
 func (s *MemoryService) Reindex() (int, error) {
 	if err := s.checkOpen(); err != nil {
 		return 0, err

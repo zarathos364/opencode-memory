@@ -7,12 +7,16 @@ import (
 )
 
 // storeAt creates a store that a walk up can recognise. The open code folder
-// only counts as a store once it holds memories.
+// only counts as a store once it holds a memory file.
 func storeAt(t *testing.T, base string) string {
 	t.Helper()
 	store := filepath.Join(base, OpenCodeDirName)
-	if err := os.MkdirAll(filepath.Join(store, MemoriesDirName), 0o755); err != nil {
+	raw := filepath.Join(store, MemoriesDirName, RawDirName)
+	if err := os.MkdirAll(raw, 0o755); err != nil {
 		t.Fatalf("creating the store failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(raw, "memory.md"), []byte("body"), 0o644); err != nil {
+		t.Fatalf("writing a memory failed: %v", err)
 	}
 	return store
 }
@@ -60,6 +64,27 @@ func TestResolveRootSkipsAConfigurationFolderWithoutMemories(t *testing.T) {
 	// a store, so the shared store has to win over it.
 	if err := os.Mkdir(filepath.Join(base, OpenCodeDirName), 0o755); err != nil {
 		t.Fatalf("creating the configuration folder failed: %v", err)
+	}
+
+	got, err := ResolveRoot("", base)
+	if err != nil {
+		t.Fatalf("ResolveRoot returned error: %v", err)
+	}
+	want := filepath.Join(configHome, "opencode")
+	if got != want {
+		t.Errorf("ResolveRoot = %q, want the configuration directory %q", got, want)
+	}
+}
+
+func TestResolveRootSkipsAStoreHoldingNoMemories(t *testing.T) {
+	t.Setenv(RootEnvVar, "")
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	base := t.TempDir()
+	empty := filepath.Join(base, OpenCodeDirName, MemoriesDirName, IndexDirName)
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatalf("creating the empty store failed: %v", err)
 	}
 
 	got, err := ResolveRoot("", base)

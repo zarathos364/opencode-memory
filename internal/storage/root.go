@@ -43,10 +43,12 @@ func ResolveRoot(explicit, startDir string) (string, error) {
 
 	// A project only counts as a store when it holds memories. A folder that
 	// merely carries the open code name is a setting, not a store, and skipping
-	// it is what lets one shared store serve every project.
+	// it is what lets one shared store serve every project. A store holding an
+	// index and no memories is left behind by a probe, and stopping there would
+	// hide the shared store from every later command.
 	for dir := startDir; ; {
 		candidate := filepath.Join(dir, OpenCodeDirName, MemoriesDirName)
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+		if holdsMemories(candidate) {
 			return absolute(filepath.Join(dir, OpenCodeDirName))
 		}
 		parent := filepath.Dir(dir)
@@ -60,6 +62,11 @@ func ResolveRoot(explicit, startDir string) (string, error) {
 		return absolute(filepath.Join(configDir, ConfigDirName))
 	}
 	return absolute(filepath.Join(startDir, OpenCodeDirName))
+}
+
+func holdsMemories(dir string) bool {
+	entries, err := os.ReadDir(filepath.Join(dir, RawDirName))
+	return err == nil && len(entries) > 0
 }
 
 func existingDir(path, source string) (string, error) {

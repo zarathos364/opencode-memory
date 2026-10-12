@@ -81,6 +81,8 @@ func (s *Server) handle(line []byte) []byte {
 		return nil
 	}
 	switch req.Method {
+	case "ping":
+		return resultReply(req.ID, map[string]any{})
 	case "initialize":
 		return resultReply(req.ID, map[string]any{
 			"protocolVersion": protocolVersion,

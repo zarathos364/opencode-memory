@@ -145,6 +145,17 @@ func TestUnknownMethodIsReported(t *testing.T) {
 	}
 }
 
+func TestPingAnswersWithAnEmptyResult(t *testing.T) {
+	replies := serve(t, storeRoot(t), requestLine(1, "ping", ""))
+	reply := decodeReply(t, replies[0])
+	if _, ok := reply["error"]; ok {
+		t.Fatalf("ping returned an error:\n%s", replies[0])
+	}
+	if _, ok := reply["result"]; !ok {
+		t.Errorf("ping returned no result:\n%s", replies[0])
+	}
+}
+
 func TestToolsListReturnsSevenTools(t *testing.T) {
 	replies := serve(t, storeRoot(t), requestLine(1, "tools/list", ""))
 	reply := decodeReply(t, replies[0])

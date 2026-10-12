@@ -83,16 +83,16 @@ This session stores a memory, finds it again, and deletes it.
 ```sh
 $ opencode-memory add --title "Go module layout" --tags go,arch \
     "Keep cmd thin and put logic in internal packages."
-01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
+01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 
 $ opencode-memory search "module layout"
-score=1.2837  id=01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47  Go module layout
+score=1.2837  id=01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47  Go module layout
 
 $ opencode-memory list
-2026-10-11T12:00:00Z  id=01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47  Go module layout
+2026-10-11T12:00:00Z  id=01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47  Go module layout
 
-$ opencode-memory get 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
-id: 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
+$ opencode-memory get 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
+id: 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 title: Go module layout
 created: 2026-10-11T12:00:00Z
 tags: go, arch
@@ -100,8 +100,8 @@ sensitive: false
 
 Keep cmd thin and put logic in internal packages.
 
-$ opencode-memory delete 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
-deleted 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
+$ opencode-memory delete 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
+deleted 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 ```
 
 ## Output and behavior
@@ -117,7 +117,7 @@ Flags work before or after the positional arguments.
 ```sh
 $ opencode-memory add --title "Go module layout" --tags go,arch \
     "Keep cmd thin and put logic in internal packages."
-01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
+01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 ```
 
 Tags are trimmed, lowercased and de-duplicated before they are stored.
@@ -129,14 +129,14 @@ the title and tags, not the body; use `get` to read one.
 
 ```sh
 $ opencode-memory search "module layout"
-score=1.2837  id=01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47  Go module layout
+score=1.2837  id=01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47  Go module layout
 ```
 
 ```sh
 $ opencode-memory search --json "module layout"
 [
   {
-    "id": "01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47",
+    "id": "01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47",
     "created_at": "2026-10-11T12:00:00.123456789Z",
     "title": "Go module layout",
     "tags": [
@@ -156,7 +156,7 @@ for them.
 
 ```sh
 $ opencode-memory list
-2026-10-11T12:00:00Z  id=01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47  Go module layout
+2026-10-11T12:00:00Z  id=01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47  Go module layout
 ```
 
 ### get
@@ -164,8 +164,8 @@ $ opencode-memory list
 Print one memory with its header fields and body.
 
 ```sh
-$ opencode-memory get 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
-id: 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
+$ opencode-memory get 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
+id: 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 title: Go module layout
 created: 2026-10-11T12:00:00Z
 tags: go, arch
@@ -181,9 +181,9 @@ Rewrite a memory while keeping its id and creation time. Pass `--title`,
 replace the body.
 
 ```sh
-$ opencode-memory update 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47 \
+$ opencode-memory update 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47 \
     --tags go,testing "Keep cmd thin, put logic in internal packages, cover it with tests."
-01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
+01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 ```
 
 The command needs at least one field or new text.
@@ -193,8 +193,8 @@ The command needs at least one field or new text.
 Delete one memory and its index entry.
 
 ```sh
-$ opencode-memory delete 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
-deleted 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
+$ opencode-memory delete 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
+deleted 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 ```
 
 ### reindex
@@ -239,7 +239,7 @@ Each memory is a markdown file with a YAML header followed by the body:
 ```markdown
 ---
 schema_version: 1
-id: 01935c2a-7f4e-7c3b-9a10-2f6d8e5b1c47
+id: 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 created_at: "2026-10-11T12:00:00.123456789Z"
 tags:
     - go

@@ -23,6 +23,7 @@ always be rebuilt, so a damaged or drifted index never costs you data.
 - [Search queries](#search-queries)
 - [Sensitive memories](#sensitive-memories)
 - [Consistency and concurrency](#consistency-and-concurrency)
+- [MCP server](#mcp-server)
 - [Problems and fixes](#problems-and-fixes)
 - [Development](#development)
 - [License](#license)
@@ -304,6 +305,39 @@ warning: the search index is out of sync, run 'opencode-memory reindex'
 A single process holds an exclusive lock on the index directory. A second
 instance that opens the same store at the same time reports that another
 instance already holds the store. This prevents corruption.
+
+## MCP server
+
+`opencode-memory serve` exposes the store to agents as MCP tools over stdio.
+It serves one store per process and opens it for each tool call, so the CLI
+keeps working while the server runs. Every tool returns JSON in the first
+content part, and a failure sets `isError` with the message in the same place.
+
+Configure it in `opencode.jsonc`, globally or per project:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "memory": {
+        "type": "local",
+        "command": ["opencode-memory", "serve"],
+        "codemode": false
+      }
+    }
+  },
+  "permissions": [
+    { "action": "memory_*", "resource": "*", "effect": "allow" }
+  ]
+}
+```
+
+The seven tools are `memory_add`, `memory_search`, `memory_list`,
+`memory_get`, `memory_update`, `memory_delete` and `memory_reindex`. They take
+the same fields as the matching commands. Copy `docs/MCP_INSTRUCTION.md`
+into your `AGENTS.md` so the agent keeps its own memory. The
+server shows up in `opencode mcp list` once configured.
 
 ## Problems and fixes
 

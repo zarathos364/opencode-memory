@@ -14,7 +14,6 @@ import (
 	"github.com/blevesearch/bleve/v2/mapping"
 )
 
-// Document is the indexed projection of a memory.
 type Document struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
@@ -24,13 +23,11 @@ type Document struct {
 	Sensitive bool      `json:"sensitive"`
 }
 
-// Hit is a single search result.
 type Hit struct {
 	ID    string
 	Score float64
 }
 
-// Index is one open handle over an index directory.
 type Index struct {
 	index bleve.Index
 }
@@ -49,7 +46,6 @@ func (e *LockError) Unwrap() error {
 	return e.Err
 }
 
-// IsLockError reports whether an error came from another process holding the index.
 func IsLockError(err error) bool {
 	var lockErr *LockError
 	return errors.As(err, &lockErr)
@@ -82,7 +78,6 @@ func Open(dir string) (*Index, error) {
 	return &Index{index: index}, nil
 }
 
-// Close releases the index lock.
 func (i *Index) Close() error {
 	if err := i.index.Close(); err != nil {
 		return fmt.Errorf("close index: %w", err)
@@ -90,7 +85,6 @@ func (i *Index) Close() error {
 	return nil
 }
 
-// Count reports how many documents the index currently holds.
 func (i *Index) Count() (uint64, error) {
 	count, err := i.index.DocCount()
 	if err != nil {

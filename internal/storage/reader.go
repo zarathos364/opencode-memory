@@ -11,13 +11,10 @@ import (
 	"uuid"
 )
 
-// Reader loads memories from one directory.
 type Reader struct {
 	rawDir string
 }
 
-// NewReader returns a reader rooted at rawDir, for example the raw folder of the
-// memory store.
 func NewReader(rawDir string) *Reader {
 	return &Reader{rawDir: rawDir}
 }

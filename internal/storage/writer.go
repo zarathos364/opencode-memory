@@ -11,13 +11,10 @@ import (
 	"uuid"
 )
 
-// Writer stores memories as markdown files inside one directory.
 type Writer struct {
 	rawDir string
 }
 
-// NewWriter returns a writer rooted at rawDir, for example the raw folder of the
-// memory store.
 func NewWriter(rawDir string) *Writer {
 	return &Writer{rawDir: rawDir}
 }
@@ -41,12 +38,10 @@ func (w *Writer) Create(title, content string, tags []string, sensitive bool) (*
 	return m, nil
 }
 
-// Replace rewrites a memory under the identifier it already has.
 func (w *Writer) Replace(m *Memory) error {
 	return w.store(m)
 }
 
-// Remove deletes the file of one memory.
 func (w *Writer) Remove(id string) error {
 	clean, err := CanonicalID(id)
 	if err != nil {

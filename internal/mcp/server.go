@@ -11,7 +11,6 @@ import (
 	"io"
 )
 
-// protocolVersion is the MCP revision this server speaks.
 const protocolVersion = "2025-11-25"
 
 // JSON-RPC error codes.

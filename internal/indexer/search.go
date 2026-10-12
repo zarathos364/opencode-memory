@@ -14,7 +14,6 @@ import (
 // unchanged instead of being rewritten as a plain term search.
 var knownField = regexp.MustCompile(`(?i)\b(?:title|content|tags|sensitive|created_at|id):`)
 
-// DefaultLimit bounds a search when the caller does not pick a limit.
 const DefaultLimit = 10
 
 // Search returns the best matches for raw, highest score first. Terms are matched

@@ -20,12 +20,10 @@ const (
 	RootEnvVar = "OPENCODE_MEMORY_ROOT"
 )
 
-// RawDir is where the markdown files live under a root.
 func RawDir(root string) string {
 	return filepath.Join(root, MemoriesDirName, RawDirName)
 }
 
-// IndexDir is where the search index lives under a root.
 func IndexDir(root string) string {
 	return filepath.Join(root, MemoriesDirName, IndexDirName)
 }

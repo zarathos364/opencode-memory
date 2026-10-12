@@ -11,7 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// SchemaVersion is the header version understood by this build.
 const SchemaVersion = 1
 
 // Memory is a stored memory: a versioned YAML header plus a markdown body.

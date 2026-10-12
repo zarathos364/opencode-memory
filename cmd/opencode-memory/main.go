@@ -119,17 +119,13 @@ func runAdd(args []string, out, errOut io.Writer) error {
 		return errors.New("add needs the memory text")
 	}
 
-	svc, err := openService(*root, errOut)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = svc.Close() }()
-
-	created, err := svc.Create(*title, strings.Join(flags.Args(), " "), splitTags(*tags), *sensitive)
-	if err != nil {
-		return err
-	}
-	return printLine(out, "%s\n", created.ID)
+	return withService(*root, func(svc *service.MemoryService) error {
+		created, err := svc.Create(*title, strings.Join(flags.Args(), " "), splitTags(*tags), *sensitive)
+		if err != nil {
+			return err
+		}
+		return printLine(out, "%s\n", created.ID)
+	})
 }
 
 func runSearch(args []string, out, errOut io.Writer) error {
@@ -144,29 +140,26 @@ func runSearch(args []string, out, errOut io.Writer) error {
 		return errors.New("search needs a query")
 	}
 
-	svc, err := openService(*root, errOut)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = svc.Close() }()
-	if err := warnIfOutOfSync(svc, errOut); err != nil {
-		return err
-	}
+	return withService(*root, func(svc *service.MemoryService) error {
+		if err := warnIfOutOfSync(svc, errOut); err != nil {
+			return err
+		}
 
-	results, err := svc.Search(strings.Join(flags.Args(), " "), *limit)
-	if err != nil {
-		return err
-	}
-	if *asJSON {
-		return writeJSON(out, toSearchJSON(results))
-	}
-	for _, result := range results {
-		err := printLine(out, "score=%.4f  id=%s  %s\n", result.Score, result.Memory.ID, result.Memory.Title)
+		results, err := svc.Search(strings.Join(flags.Args(), " "), *limit)
 		if err != nil {
 			return err
 		}
-	}
-	return nil
+		if *asJSON {
+			return writeJSON(out, toSearchJSON(results))
+		}
+		for _, result := range results {
+			err := printLine(out, "score=%.4f  id=%s  %s\n", result.Score, result.Memory.ID, result.Memory.Title)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func runList(args []string, out, errOut io.Writer) error {
@@ -178,38 +171,35 @@ func runList(args []string, out, errOut io.Writer) error {
 		return err
 	}
 
-	svc, err := openService(*root, errOut)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = svc.Close() }()
-	if err := warnIfOutOfSync(svc, errOut); err != nil {
-		return err
-	}
-
-	memories, err := svc.List()
-	if err != nil {
-		return err
-	}
-
-	visible := make([]*storage.Memory, 0, len(memories))
-	for _, m := range memories {
-		if m.Sensitive && !*showSensitive {
-			continue
+	return withService(*root, func(svc *service.MemoryService) error {
+		if err := warnIfOutOfSync(svc, errOut); err != nil {
+			return err
 		}
-		visible = append(visible, m)
-	}
 
-	if *asJSON {
-		return writeJSON(out, toMemoryJSON(visible, nil))
-	}
-	for _, m := range visible {
-		err := printLine(out, "%s  id=%s  %s\n", m.CreatedAt.Format(time.RFC3339), m.ID, m.Title)
+		memories, err := svc.List()
 		if err != nil {
 			return err
 		}
-	}
-	return nil
+
+		visible := make([]*storage.Memory, 0, len(memories))
+		for _, m := range memories {
+			if m.Sensitive && !*showSensitive {
+				continue
+			}
+			visible = append(visible, m)
+		}
+
+		if *asJSON {
+			return writeJSON(out, toMemoryJSON(visible, nil))
+		}
+		for _, m := range visible {
+			err := printLine(out, "%s  id=%s  %s\n", m.CreatedAt.Format(time.RFC3339), m.ID, m.Title)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func runGet(args []string, out, errOut io.Writer) error {
@@ -222,18 +212,14 @@ func runGet(args []string, out, errOut io.Writer) error {
 		return errors.New("get needs exactly one id")
 	}
 
-	svc, err := openService(*root, errOut)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = svc.Close() }()
-
-	m, err := svc.Get(flags.Arg(0))
-	if err != nil {
-		return err
-	}
-	return printLine(out, "id: %s\ntitle: %s\ncreated: %s\ntags: %s\nsensitive: %t\n\n%s\n",
-		m.ID, m.Title, m.CreatedAt.Format(time.RFC3339), strings.Join(m.Tags, ", "), m.Sensitive, m.Content)
+	return withService(*root, func(svc *service.MemoryService) error {
+		m, err := svc.Get(flags.Arg(0))
+		if err != nil {
+			return err
+		}
+		return printLine(out, "id: %s\ntitle: %s\ncreated: %s\ntags: %s\nsensitive: %t\n\n%s\n",
+			m.ID, m.Title, m.CreatedAt.Format(time.RFC3339), strings.Join(m.Tags, ", "), m.Sensitive, m.Content)
+	})
 }
 
 func runUpdate(args []string, out, errOut io.Writer) error {
@@ -271,17 +257,13 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 		return errors.New("update needs --title, --tags, --sensitive or new text")
 	}
 
-	svc, err := openService(*root, errOut)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = svc.Close() }()
-
-	updated, err := svc.Update(flags.Arg(0), patch)
-	if err != nil {
-		return err
-	}
-	return printLine(out, "%s\n", updated.ID)
+	return withService(*root, func(svc *service.MemoryService) error {
+		updated, err := svc.Update(flags.Arg(0), patch)
+		if err != nil {
+			return err
+		}
+		return printLine(out, "%s\n", updated.ID)
+	})
 }
 
 func runDelete(args []string, out, errOut io.Writer) error {
@@ -294,16 +276,12 @@ func runDelete(args []string, out, errOut io.Writer) error {
 		return errors.New("delete needs exactly one id")
 	}
 
-	svc, err := openService(*root, errOut)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = svc.Close() }()
-
-	if err := svc.Delete(flags.Arg(0)); err != nil {
-		return err
-	}
-	return printLine(out, "deleted %s\n", flags.Arg(0))
+	return withService(*root, func(svc *service.MemoryService) error {
+		if err := svc.Delete(flags.Arg(0)); err != nil {
+			return err
+		}
+		return printLine(out, "deleted %s\n", flags.Arg(0))
+	})
 }
 
 func runReindex(args []string, out, errOut io.Writer) error {
@@ -313,17 +291,13 @@ func runReindex(args []string, out, errOut io.Writer) error {
 		return err
 	}
 
-	svc, err := openService(*root, errOut)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = svc.Close() }()
-
-	stored, err := svc.Reindex()
-	if err != nil {
-		return err
-	}
-	return printLine(out, "reindexed %d memories\n", stored)
+	return withService(*root, func(svc *service.MemoryService) error {
+		stored, err := svc.Reindex()
+		if err != nil {
+			return err
+		}
+		return printLine(out, "reindexed %d memories\n", stored)
+	})
 }
 
 func newFlagSet(name string, errOut io.Writer) *flag.FlagSet {
@@ -392,9 +366,20 @@ func consumesValue(definition *flag.Flag) bool {
 	return !ok || !boolean.IsBoolFlag()
 }
 
+// withService resolves the store, opens it, hands it to work and closes it
+// afterwards, so every command holds the index the same way.
+func withService(root string, work func(*service.MemoryService) error) error {
+	svc, err := openService(root)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = svc.Close() }()
+	return work(svc)
+}
+
 // openService resolves the store location and opens it, turning the two failures
 // that need an explanation into a message a caller can act on.
-func openService(root string, errOut io.Writer) (*service.MemoryService, error) {
+func openService(root string) (*service.MemoryService, error) {
 	start, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("read working directory: %w", err)

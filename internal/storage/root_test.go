@@ -97,6 +97,31 @@ func TestResolveRootSkipsAStoreHoldingNoMemories(t *testing.T) {
 	}
 }
 
+func TestResolveRootSkipsAFolderHoldingNoMemoryFile(t *testing.T) {
+	t.Setenv(RootEnvVar, "")
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	base := t.TempDir()
+	raw := filepath.Join(base, OpenCodeDirName, MemoriesDirName, RawDirName)
+	if err := os.MkdirAll(raw, 0o755); err != nil {
+		t.Fatalf("creating the raw folder failed: %v", err)
+	}
+	// A stray file is not a memory, so it must not divert the walk up.
+	if err := os.WriteFile(filepath.Join(raw, "notes.txt"), []byte("stray"), 0o644); err != nil {
+		t.Fatalf("writing the stray file failed: %v", err)
+	}
+
+	got, err := ResolveRoot("", base)
+	if err != nil {
+		t.Fatalf("ResolveRoot returned error: %v", err)
+	}
+	want := filepath.Join(configHome, "opencode")
+	if got != want {
+		t.Errorf("ResolveRoot = %q, want the configuration directory %q", got, want)
+	}
+}
+
 func TestResolveRootPrefersTheExplicitValue(t *testing.T) {
 	t.Setenv(RootEnvVar, "")
 

@@ -36,7 +36,11 @@ func (r *Reader) Get(id string) (*Memory, error) {
 		}
 		return nil, fmt.Errorf("read memory %q: %w", clean, err)
 	}
-	return parseFile(string(body))
+	m, err := parseFile(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("parse memory %q: %w", clean, err)
+	}
+	return m, nil
 }
 
 // List loads every stored memory ordered by creation. Identifiers are issued in

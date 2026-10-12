@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Layout of the memory store inside the open code directory.
@@ -66,7 +67,17 @@ func ResolveRoot(explicit, startDir string) (string, error) {
 
 func holdsMemories(dir string) bool {
 	entries, err := os.ReadDir(filepath.Join(dir, RawDirName))
-	return err == nil && len(entries) > 0
+	if err != nil {
+		return false
+	}
+	// Only memory files count, like List: a stray file must not divert the
+	// walk up to the wrong directory.
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
+			return true
+		}
+	}
+	return false
 }
 
 func existingDir(path, source string) (string, error) {

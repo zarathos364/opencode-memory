@@ -77,6 +77,30 @@ func TestCreatedFileIsHumanReadable(t *testing.T) {
 	}
 }
 
+func TestSensitiveFileIsReadableOnlyByItsOwner(t *testing.T) {
+	raw := filepath.Join(t.TempDir(), "raw")
+	w := NewWriter(raw)
+
+	plain, err := w.Create("title", "content", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	secret, err := w.Create("title", "content", nil, true)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	for id, want := range map[string]os.FileMode{plain.ID: 0o644, secret.ID: 0o600} {
+		info, err := os.Stat(filepath.Join(raw, id+".md"))
+		if err != nil {
+			t.Fatalf("stat returned error: %v", err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("mode = %o, want %o", got, want)
+		}
+	}
+}
+
 func TestIdentifiersFollowCreationOrder(t *testing.T) {
 	w, _ := newStore(t)
 

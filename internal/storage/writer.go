@@ -72,10 +72,16 @@ func (w *Writer) store(m *Memory) error {
 	if err := os.MkdirAll(w.rawDir, 0o755); err != nil {
 		return fmt.Errorf("create raw directory: %w", err)
 	}
-	return writeAtomic(w.rawDir, m.ID+".md", body)
+	// A sensitive memory stays out of the index but on the disk, so its file
+	// must not stay readable by other users.
+	mode := os.FileMode(0o644)
+	if m.Sensitive {
+		mode = 0o600
+	}
+	return writeAtomic(w.rawDir, m.ID+".md", body, mode)
 }
 
-func writeAtomic(dir, name, body string) error {
+func writeAtomic(dir, name, body string, mode os.FileMode) error {
 	tmp, err := os.CreateTemp(dir, "mem-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create temporary file: %w", err)
@@ -91,7 +97,7 @@ func writeAtomic(dir, name, body string) error {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("close temporary file: %w", err)
 	}
-	if err := os.Chmod(tmpName, 0o644); err != nil {
+	if err := os.Chmod(tmpName, mode); err != nil {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("set file mode: %w", err)
 	}

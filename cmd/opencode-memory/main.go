@@ -190,7 +190,7 @@ func runList(args []string, out, errOut io.Writer) error {
 		}
 
 		if *asJSON {
-			return writeJSON(out, toMemoryJSON(visible, nil))
+			return writeJSON(out, toMemoryJSON(visible))
 		}
 		for _, m := range visible {
 			err := printLine(out, "%s  id=%s  %s\n", m.CreatedAt.Format(time.RFC3339), m.ID, m.Title)
@@ -448,33 +448,32 @@ func splitTags(raw string) []string {
 	return strings.Split(raw, ",")
 }
 
-func toMemoryJSON(memories []*storage.Memory, scores []float64) []memoryJSON {
+func newMemoryJSON(m *storage.Memory, score float64) memoryJSON {
+	return memoryJSON{
+		ID:        m.ID,
+		CreatedAt: m.CreatedAt.Format(time.RFC3339Nano),
+		Title:     m.Title,
+		Tags:      m.Tags,
+		Sensitive: m.Sensitive,
+		Content:   m.Content,
+		Score:     score,
+	}
+}
+
+func toMemoryJSON(memories []*storage.Memory) []memoryJSON {
 	out := make([]memoryJSON, 0, len(memories))
-	for i, m := range memories {
-		item := memoryJSON{
-			ID:        m.ID,
-			CreatedAt: m.CreatedAt.Format(time.RFC3339Nano),
-			Title:     m.Title,
-			Tags:      m.Tags,
-			Sensitive: m.Sensitive,
-			Content:   m.Content,
-		}
-		if i < len(scores) {
-			item.Score = scores[i]
-		}
-		out = append(out, item)
+	for _, m := range memories {
+		out = append(out, newMemoryJSON(m, 0))
 	}
 	return out
 }
 
 func toSearchJSON(results []service.Result) []memoryJSON {
-	memories := make([]*storage.Memory, 0, len(results))
-	scores := make([]float64, 0, len(results))
+	out := make([]memoryJSON, 0, len(results))
 	for _, result := range results {
-		memories = append(memories, result.Memory)
-		scores = append(scores, result.Score)
+		out = append(out, newMemoryJSON(result.Memory, result.Score))
 	}
-	return toMemoryJSON(memories, scores)
+	return out
 }
 
 func writeJSON(out io.Writer, value any) error {

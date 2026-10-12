@@ -91,12 +91,12 @@ func TestSensitiveMemoriesNeverReachTheIndex(t *testing.T) {
 	if err := index.Index(sampleDocument("a", "title", "content")); err != nil {
 		t.Fatalf("Index returned error: %v", err)
 	}
-	stored, err := index.Has("a")
+	stored, err := index.Count()
 	if err != nil {
-		t.Fatalf("Has returned error: %v", err)
+		t.Fatalf("Count returned error: %v", err)
 	}
-	if !stored {
-		t.Fatal("Has = false after storing, want true")
+	if stored != 1 {
+		t.Fatalf("Count = %d after storing, want 1", stored)
 	}
 
 	// Re-storing the same memory as sensitive must take it back out.
@@ -106,12 +106,12 @@ func TestSensitiveMemoriesNeverReachTheIndex(t *testing.T) {
 		t.Fatalf("Index returned error: %v", err)
 	}
 
-	stored, err = index.Has("a")
+	stored, err = index.Count()
 	if err != nil {
-		t.Fatalf("Has returned error: %v", err)
+		t.Fatalf("Count returned error: %v", err)
 	}
-	if stored {
-		t.Error("Has = true for a sensitive memory, want false")
+	if stored != 0 {
+		t.Errorf("Count = %d for a sensitive memory, want 0", stored)
 	}
 	hits, err := index.Search("title", 10)
 	if err != nil {

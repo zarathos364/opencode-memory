@@ -2,8 +2,6 @@ package indexer
 
 import (
 	"fmt"
-
-	"github.com/blevesearch/bleve/v2"
 )
 
 // Index stores one document. A sensitive memory is never stored: it is removed
@@ -25,16 +23,4 @@ func (i *Index) Delete(id string) error {
 		return fmt.Errorf("remove document %q: %w", id, err)
 	}
 	return nil
-}
-
-// Has reports whether a document is stored.
-func (i *Index) Has(id string) (bool, error) {
-	request := bleve.NewSearchRequest(bleve.NewDocIDQuery([]string{id}))
-	request.Size = 0
-
-	result, err := i.index.Search(request)
-	if err != nil {
-		return false, fmt.Errorf("look up document %q: %w", id, err)
-	}
-	return result.Total > 0, nil
 }

@@ -36,6 +36,21 @@ func createMemory(t *testing.T, root, title, body string) string {
 	return strings.TrimSpace(created.out)
 }
 
+// storedBody reads one memory back as data, which is also the only way to see a
+// body exactly as it was stored.
+func storedBody(t *testing.T, root, id string) string {
+	t.Helper()
+	shown := call(rooted(root, "get", id, "--json")...)
+	if shown.err != nil {
+		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
+	}
+	var one memoryJSON
+	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
+	}
+	return one.Content
+}
+
 func TestUpdateAcceptsFlagsAfterTheIdentifier(t *testing.T) {
 	root := t.TempDir()
 	id := createMemory(t, root, "Original title", "original body")
@@ -251,5 +266,155 @@ func TestOpenServiceNamesTheRealCause(t *testing.T) {
 	}
 	if strings.Contains(result.err.Error(), "remove") {
 		t.Errorf("error = %q, want no advice about removing a directory that does not exist", result.err)
+	}
+}
+
+func bodyFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "body.md")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write the body file: %v", err)
+	}
+	return path
+}
+
+func TestGetPrintsJSONWithTheWholeBody(t *testing.T) {
+	root := t.TempDir()
+	body := "first line\nsecond line\n\n"
+	id := createMemory(t, root, "Json memory", body)
+
+	shown := call(rooted(root, "get", id, "--json")...)
+	if shown.err != nil {
+		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
+	}
+
+	var one memoryJSON
+	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
+	}
+	if one.Content != body {
+		t.Errorf("content = %q, want the body byte for byte, %q", one.Content, body)
+	}
+	if strings.Contains(shown.out, "score") {
+		t.Errorf("get printed a score, which only a search has:\n%s", shown.out)
+	}
+}
+
+func TestUpdateReadsTheBodyFromAFile(t *testing.T) {
+	root := t.TempDir()
+	created := call(rooted(root, "add", "--title", "Kept memory", "--tags", "go,arch",
+		"the old marker zumbido lives here")...)
+	if created.err != nil {
+		t.Fatalf("add returned error: %v (%s)", created.err, created.errOut)
+	}
+	id := strings.TrimSpace(created.out)
+
+	before := call(rooted(root, "get", id, "--json")...)
+	if before.err != nil {
+		t.Fatalf("get returned error: %v (%s)", before.err, before.errOut)
+	}
+
+	// The flag is written after the identifier on purpose, so the test also
+	// covers a flag that has to move in front of the positional arguments.
+	updated := call(rooted(root, "update", id, "--content-from", bodyFile(t, "the new marker trinado lives here\n"))...)
+	if updated.err != nil {
+		t.Fatalf("update returned error: %v (%s)", updated.err, updated.errOut)
+	}
+
+	shown := call(rooted(root, "get", id, "--json")...)
+	if shown.err != nil {
+		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
+	}
+	var one, original memoryJSON
+	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
+	}
+	if err := json.Unmarshal([]byte(before.out), &original); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, before.out)
+	}
+	if one.Content != "the new marker trinado lives here\n" {
+		t.Errorf("content = %q, want the file exactly", one.Content)
+	}
+	if one.ID != id || one.Title != "Kept memory" {
+		t.Errorf("id or title changed: %q %q", one.ID, one.Title)
+	}
+	if strings.Join(one.Tags, ",") != "go,arch" {
+		t.Errorf("tags = %v, want them kept", one.Tags)
+	}
+	if one.CreatedAt != original.CreatedAt {
+		t.Errorf("created_at = %s, want it kept, %s", one.CreatedAt, original.CreatedAt)
+	}
+}
+
+func TestUpdateFromAFileRefreshesTheIndex(t *testing.T) {
+	root := t.TempDir()
+	id := createMemory(t, root, "Moving memory", "the old marker zumbido lives here")
+
+	from := bodyFile(t, "the new marker trinado lives here")
+	updated := call(rooted(root, "update", id, "--content-from", from)...)
+	if updated.err != nil {
+		t.Fatalf("update returned error: %v (%s)", updated.err, updated.errOut)
+	}
+
+	found := call(rooted(root, "search", "trinado")...)
+	if found.err != nil {
+		t.Fatalf("search returned error: %v (%s)", found.err, found.errOut)
+	}
+	if !strings.Contains(found.out, id) {
+		t.Errorf("the word from the new body is not searchable:\n%s", found.out)
+	}
+
+	gone := call(rooted(root, "search", "zumbido")...)
+	if gone.err != nil {
+		t.Fatalf("search returned error: %v (%s)", gone.err, gone.errOut)
+	}
+	if strings.TrimSpace(gone.out) != "" {
+		t.Errorf("the word from the old body is still searchable:\n%s", gone.out)
+	}
+}
+
+func TestUpdateRejectsABodyFileItCannotUse(t *testing.T) {
+	body := "body that must stay"
+
+	cases := map[string]string{
+		"missing":    filepath.Join(t.TempDir(), "nope.md"),
+		"directory":  t.TempDir(),
+		"empty file": bodyFile(t, ""),
+	}
+
+	for name, path := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			id := createMemory(t, root, "Untouched memory", body)
+
+			result := call(rooted(root, "update", id, "--content-from", path)...)
+			if result.err == nil {
+				t.Fatalf("update accepted a body file that is %s", name)
+			}
+			if !strings.Contains(result.err.Error(), path) {
+				t.Errorf("error = %q, want it to name the path", result.err)
+			}
+			if got := storedBody(t, root, id); got != body {
+				t.Errorf("body = %q, want it untouched, %q", got, body)
+			}
+		})
+	}
+}
+
+func TestUpdateRejectsAFileAndTextTogether(t *testing.T) {
+	root := t.TempDir()
+	body := "body that must stay"
+	id := createMemory(t, root, "Untouched memory", body)
+
+	from := bodyFile(t, "replacement")
+	result := call(rooted(root, "update", id, "--content-from", from, "and also this text")...)
+	if result.err == nil {
+		t.Fatal("update accepted a body from a file and from text")
+	}
+	if !strings.Contains(result.err.Error(), "--content-from") {
+		t.Errorf("error = %q, want it to name the flag", result.err)
+	}
+	if got := storedBody(t, root, id); got != body {
+		t.Errorf("body = %q, want it untouched, %q", got, body)
 	}
 }

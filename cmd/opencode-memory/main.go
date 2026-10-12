@@ -205,6 +205,7 @@ func runList(args []string, out, errOut io.Writer) error {
 func runGet(args []string, out, errOut io.Writer) error {
 	flags := newFlagSet("get", errOut)
 	root := flags.String("root", "", "store location")
+	asJSON := flags.Bool("json", false, "print the memory as JSON")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
@@ -217,6 +218,9 @@ func runGet(args []string, out, errOut io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if *asJSON {
+			return writeJSON(out, newMemoryJSON(m, 0))
+		}
 		return printLine(out, "id: %s\ntitle: %s\ncreated: %s\ntags: %s\nsensitive: %t\n\n%s\n",
 			m.ID, m.Title, m.CreatedAt.Format(time.RFC3339), strings.Join(m.Tags, ", "), m.Sensitive, m.Content)
 	})
@@ -228,11 +232,17 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 	title := flags.String("title", "", "replace the title")
 	tags := flags.String("tags", "", "replace the tags")
 	sensitive := flags.Bool("sensitive", false, "replace the sensitive flag")
+	contentFrom := flags.String("content-from", "", "read the new body from a file")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
 	if flags.NArg() == 0 {
 		return errors.New("update needs an id")
+	}
+	// A body from a file and a body on the command line are two answers to the
+	// same question, so asking for both is refused instead of guessing.
+	if *contentFrom != "" && flags.NArg() > 1 {
+		return errors.New("update takes --content-from or new text, not both")
 	}
 
 	set := map[string]bool{}
@@ -249,12 +259,20 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 	if set["sensitive"] {
 		patch.Sensitive = sensitive
 	}
-	if flags.NArg() > 1 {
+	// The file is read before the store is opened, so a bad path fails without
+	// touching a stored memory.
+	if *contentFrom != "" {
+		body, err := readBody(*contentFrom)
+		if err != nil {
+			return err
+		}
+		patch.Content = &body
+	} else if flags.NArg() > 1 {
 		replacement := strings.Join(flags.Args()[1:], " ")
 		patch.Content = &replacement
 	}
 	if patch.Title == nil && patch.Content == nil && patch.Tags == nil && patch.Sensitive == nil {
-		return errors.New("update needs --title, --tags, --sensitive or new text")
+		return errors.New("update needs --title, --tags, --sensitive, --content-from or new text")
 	}
 
 	return withService(*root, func(svc *service.MemoryService) error {
@@ -446,6 +464,21 @@ func splitTags(raw string) []string {
 		return nil
 	}
 	return strings.Split(raw, ",")
+}
+
+// readBody loads a new memory body from a file. Every failure names the path,
+// and a file that holds no text is refused, so an interrupted edit cannot
+// replace a stored memory with nothing.
+func readBody(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read body from %s: %w", path, err)
+	}
+	body := string(data)
+	if strings.TrimSpace(body) == "" {
+		return "", fmt.Errorf("body in %s is empty", path)
+	}
+	return body, nil
 }
 
 func newMemoryJSON(m *storage.Memory, score float64) memoryJSON {

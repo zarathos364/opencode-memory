@@ -418,3 +418,199 @@ func TestUpdateRejectsAFileAndTextTogether(t *testing.T) {
 		t.Errorf("body = %q, want it untouched, %q", got, body)
 	}
 }
+
+func TestUpdateAppendsTextToTheBody(t *testing.T) {
+	root := t.TempDir()
+	created := call(rooted(root, "add", "--title", "Growing memory", "--tags", "go,arch",
+		"the old marker zumbido lives here")...)
+	if created.err != nil {
+		t.Fatalf("add returned error: %v (%s)", created.err, created.errOut)
+	}
+	id := strings.TrimSpace(created.out)
+
+	before := call(rooted(root, "get", id, "--json")...)
+	if before.err != nil {
+		t.Fatalf("get returned error: %v (%s)", before.err, before.errOut)
+	}
+
+	updated := call(rooted(root, "update", id, "--append", "the new marker trinado lands here")...)
+	if updated.err != nil {
+		t.Fatalf("update returned error: %v (%s)", updated.err, updated.errOut)
+	}
+
+	shown := call(rooted(root, "get", id, "--json")...)
+	if shown.err != nil {
+		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
+	}
+	var one, original memoryJSON
+	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
+	}
+	if err := json.Unmarshal([]byte(before.out), &original); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, before.out)
+	}
+	want := "the old marker zumbido lives here\nthe new marker trinado lands here"
+	if one.Content != want {
+		t.Errorf("content = %q, want %q", one.Content, want)
+	}
+	if one.ID != id || one.Title != "Growing memory" {
+		t.Errorf("id or title changed: %q %q", one.ID, one.Title)
+	}
+	if strings.Join(one.Tags, ",") != "go,arch" {
+		t.Errorf("tags = %v, want them kept", one.Tags)
+	}
+	if one.CreatedAt != original.CreatedAt {
+		t.Errorf("created_at = %s, want it kept, %s", one.CreatedAt, original.CreatedAt)
+	}
+}
+
+func TestUpdateAppendSeparatesWithOneNewline(t *testing.T) {
+	cases := map[string]struct {
+		old      string
+		addition string
+		want     string
+	}{
+		"body without a trailing newline": {
+			old:      "first",
+			addition: "second",
+			want:     "first\nsecond",
+		},
+		"body with a trailing newline": {
+			old:      "first\n",
+			addition: "second",
+			want:     "first\nsecond",
+		},
+		"addition keeping its own newline": {
+			old:      "first",
+			addition: "second\n",
+			want:     "first\nsecond\n",
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			id := createMemory(t, root, "Joined memory", tc.old)
+
+			updated := call(rooted(root, "update", id, "--append", tc.addition)...)
+			if updated.err != nil {
+				t.Fatalf("update returned error: %v (%s)", updated.err, updated.errOut)
+			}
+			if got := storedBody(t, root, id); got != tc.want {
+				t.Errorf("body = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUpdateAppendsFromAFile(t *testing.T) {
+	root := t.TempDir()
+	id := createMemory(t, root, "Filed memory", "kept body")
+
+	from := bodyFile(t, "filed addition")
+	updated := call(rooted(root, "update", id, "--append-from", from)...)
+	if updated.err != nil {
+		t.Fatalf("update returned error: %v (%s)", updated.err, updated.errOut)
+	}
+	if got := storedBody(t, root, id); got != "kept body\nfiled addition" {
+		t.Errorf("body = %q, want the file added to the kept body", got)
+	}
+}
+
+func TestUpdateAppendRefreshesTheIndex(t *testing.T) {
+	root := t.TempDir()
+	id := createMemory(t, root, "Indexed memory", "the old marker zumbido lives here")
+
+	updated := call(rooted(root, "update", id, "--append", "the new marker trinado lands here")...)
+	if updated.err != nil {
+		t.Fatalf("update returned error: %v (%s)", updated.err, updated.errOut)
+	}
+
+	found := call(rooted(root, "search", "trinado")...)
+	if found.err != nil {
+		t.Fatalf("search returned error: %v (%s)", found.err, found.errOut)
+	}
+	if !strings.Contains(found.out, id) {
+		t.Errorf("the word from the addition is not searchable:\n%s", found.out)
+	}
+
+	kept := call(rooted(root, "search", "zumbido")...)
+	if kept.err != nil {
+		t.Fatalf("search returned error: %v (%s)", kept.err, kept.errOut)
+	}
+	if !strings.Contains(kept.out, id) {
+		t.Errorf("the word from the kept body is no longer searchable:\n%s", kept.out)
+	}
+}
+
+func TestUpdateRejectsAnEmptyAddition(t *testing.T) {
+	body := "body that must stay"
+
+	values := map[string]string{
+		"empty flag value": "",
+		"blank flag value": "   ",
+	}
+	for name, value := range values {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			id := createMemory(t, root, "Untouched memory", body)
+
+			result := call(rooted(root, "update", id, "--append", value)...)
+			if result.err == nil {
+				t.Fatalf("update accepted an addition that is %s", name)
+			}
+			if !strings.Contains(result.err.Error(), "--append") {
+				t.Errorf("error = %q, want it to name the flag", result.err)
+			}
+			if got := storedBody(t, root, id); got != body {
+				t.Errorf("body = %q, want it untouched, %q", got, body)
+			}
+		})
+	}
+
+	t.Run("empty file", func(t *testing.T) {
+		root := t.TempDir()
+		id := createMemory(t, root, "Untouched memory", body)
+
+		empty := bodyFile(t, "")
+		result := call(rooted(root, "update", id, "--append-from", empty)...)
+		if result.err == nil {
+			t.Fatal("update accepted an addition from an empty file")
+		}
+		if !strings.Contains(result.err.Error(), empty) {
+			t.Errorf("error = %q, want it to name the path", result.err)
+		}
+		if got := storedBody(t, root, id); got != body {
+			t.Errorf("body = %q, want it untouched, %q", got, body)
+		}
+	})
+}
+
+func TestUpdateRejectsAnAdditionWithAReplacement(t *testing.T) {
+	body := "body that must stay"
+	replacement := bodyFile(t, "replacement")
+	addition := bodyFile(t, "addition")
+
+	cases := map[string][]string{
+		"append with text":              {"--append", "extra", "and text"},
+		"append from with text":         {"--append-from", addition, "and text"},
+		"append with content from":      {"--append", "extra", "--content-from", replacement},
+		"append from with content from": {"--append-from", addition, "--content-from", replacement},
+		"append with append from":       {"--append", "extra", "--append-from", addition},
+	}
+
+	for name, rest := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			id := createMemory(t, root, "Untouched memory", body)
+
+			result := call(append(rooted(root, "update", id), rest...)...)
+			if result.err == nil {
+				t.Fatalf("update accepted %s", name)
+			}
+			if got := storedBody(t, root, id); got != body {
+				t.Errorf("body = %q, want it untouched, %q", got, body)
+			}
+		})
+	}
+}

@@ -233,20 +233,33 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 	tags := flags.String("tags", "", "replace the tags")
 	sensitive := flags.Bool("sensitive", false, "replace the sensitive flag")
 	contentFrom := flags.String("content-from", "", "read the new body from a file")
+	appendText := flags.String("append", "", "add text to the end of the body")
+	appendFrom := flags.String("append-from", "", "add the end of the body from a file")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
 	if flags.NArg() == 0 {
 		return errors.New("update needs an id")
 	}
+
+	set := map[string]bool{}
+	flags.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
 	// A body from a file and a body on the command line are two answers to the
 	// same question, so asking for both is refused instead of guessing.
 	if *contentFrom != "" && flags.NArg() > 1 {
 		return errors.New("update takes --content-from or new text, not both")
 	}
-
-	set := map[string]bool{}
-	flags.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	// An addition and a replacement arrive in no defined order either.
+	if set["append"] && set["append-from"] {
+		return errors.New("update takes --append or --append-from, not both")
+	}
+	if (set["append"] || set["append-from"]) && flags.NArg() > 1 {
+		return errors.New("update takes an addition or new text, not both")
+	}
+	if (set["append"] || set["append-from"]) && *contentFrom != "" {
+		return errors.New("update takes --content-from or an addition, not both")
+	}
 
 	patch := service.Patch{}
 	if set["title"] {
@@ -271,11 +284,41 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 		replacement := strings.Join(flags.Args()[1:], " ")
 		patch.Content = &replacement
 	}
-	if patch.Title == nil && patch.Content == nil && patch.Tags == nil && patch.Sensitive == nil {
-		return errors.New("update needs --title, --tags, --sensitive, --content-from or new text")
+	// Appending nothing would still rewrite the file and the index entry, so a
+	// value holding no text is refused. A file is refused by the same read that
+	// names a bad path.
+	addition := ""
+	if set["append"] {
+		if strings.TrimSpace(*appendText) == "" {
+			return errors.New("update --append holds no text")
+		}
+		addition = *appendText
+	} else if set["append-from"] {
+		text, err := readBody(*appendFrom)
+		if err != nil {
+			return err
+		}
+		addition = text
+	}
+	if patch.Title == nil && patch.Content == nil && patch.Tags == nil && patch.Sensitive == nil && addition == "" {
+		return errors.New("update needs --title, --tags, --sensitive, --content-from, --append, --append-from or new text")
 	}
 
 	return withService(*root, func(svc *service.MemoryService) error {
+		if addition != "" {
+			current, err := svc.Get(flags.Arg(0))
+			if err != nil {
+				return err
+			}
+			// The addition starts on its own line. A body that already ends
+			// its line needs no second newline.
+			joined := current.Content
+			if !strings.HasSuffix(joined, "\n") {
+				joined += "\n"
+			}
+			joined += addition
+			patch.Content = &joined
+		}
 		updated, err := svc.Update(flags.Arg(0), patch)
 		if err != nil {
 			return err

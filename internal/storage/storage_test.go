@@ -113,12 +113,27 @@ func TestSensitiveFileIsReadableOnlyByItsOwner(t *testing.T) {
 		t.Errorf("mode = %o, want the umask-applied %o", got, want)
 	}
 
+	// The sensitive file is compared the same way: a control created with the
+	// same request passes on Windows, where Stat synthesizes the mode.
+	secretControl := filepath.Join(t.TempDir(), "secret-control")
+	file, err = os.OpenFile(secretControl, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		t.Fatalf("creating the secret control file failed: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("closing the secret control file failed: %v", err)
+	}
+
 	secretInfo, err := os.Stat(filepath.Join(raw, secret.ID+".md"))
 	if err != nil {
 		t.Fatalf("stat returned error: %v", err)
 	}
-	if got := secretInfo.Mode().Perm(); got&0o077 != 0 {
-		t.Errorf("sensitive mode = %o, want no group or other bits", got)
+	secretControlInfo, err := os.Stat(secretControl)
+	if err != nil {
+		t.Fatalf("stat returned error: %v", err)
+	}
+	if got, want := secretInfo.Mode().Perm(), secretControlInfo.Mode().Perm(); got != want {
+		t.Errorf("sensitive mode = %o, want the owner-only %o", got, want)
 	}
 }
 
@@ -238,6 +253,43 @@ func TestCreateNormalizesTags(t *testing.T) {
 	}
 	if m.Tags[0] != "go" || m.Tags[1] != "beta" {
 		t.Errorf("Tags = %v, want [go beta]", m.Tags)
+	}
+}
+
+func TestStoreRetriesATakenTemporaryName(t *testing.T) {
+	previous := tempSuffix
+	t.Cleanup(func() { tempSuffix = previous })
+	calls := 0
+	tempSuffix = func() string {
+		calls++
+		if calls == 1 {
+			return "taken"
+		}
+		return "free"
+	}
+
+	w := NewWriter(filepath.Join(t.TempDir(), "raw"))
+	if err := os.MkdirAll(w.rawDir, 0o755); err != nil {
+		t.Fatalf("create the raw directory: %v", err)
+	}
+	m := &Memory{
+		SchemaVersion: SchemaVersion,
+		ID:            uuid.NewV7().String(),
+		CreatedAt:     time.Now().UTC(),
+		Tags:          []string{},
+		Title:         "title",
+		Content:       "content",
+	}
+	taken := filepath.Join(w.rawDir, m.ID+".md.taken.tmp")
+	if err := os.WriteFile(taken, []byte("x"), 0o644); err != nil {
+		t.Fatalf("create the taken name: %v", err)
+	}
+
+	if err := w.store(m); err != nil {
+		t.Fatalf("store returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(w.rawDir, m.ID+".md")); err != nil {
+		t.Errorf("the memory was not stored: %v", err)
 	}
 }
 

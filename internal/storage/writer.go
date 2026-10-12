@@ -102,12 +102,16 @@ func writeAtomic(dir, name, body string, mode os.FileMode) error {
 	return nil
 }
 
+// tempSuffix names the temporary file. It is a variable so a test can force a
+// name collision.
+var tempSuffix = func() string { return uuid.New().String() }
+
 // createTemp opens a fresh temporary file beside the target, requesting the
 // final mode so the kernel applies the umask at creation. os.CreateTemp cannot
 // be used: it always creates with 0600 and would ignore the request.
 func createTemp(dir, name string, mode os.FileMode) (*os.File, error) {
 	for attempt := 0; attempt < 100; attempt++ {
-		path := filepath.Join(dir, name+"."+uuid.New().String()+".tmp")
+		path := filepath.Join(dir, name+"."+tempSuffix()+".tmp")
 		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 		if err == nil {
 			return file, nil

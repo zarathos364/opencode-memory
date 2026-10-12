@@ -5,6 +5,7 @@ package storage
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -64,5 +65,35 @@ func TestSensitiveFileStaysOwnerOnlyUnderAPermissiveUmask(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Errorf("mode = %o under umask 000, want 0600", got)
+	}
+}
+
+func TestCreateFailsWhenTheRawDirectoryIsNotWritable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the directory mode")
+	}
+
+	raw := filepath.Join(t.TempDir(), "raw")
+	w := NewWriter(raw)
+	if _, err := w.Create("title", "content", nil, false); err != nil {
+		t.Fatalf("first Create returned error: %v", err)
+	}
+	if err := os.Chmod(raw, 0o555); err != nil {
+		t.Fatalf("chmod returned error: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(raw, 0o755) })
+
+	if _, err := w.Create("title", "content", nil, false); err == nil {
+		t.Fatal("Create in a read-only directory returned nil error, want failure")
+	}
+
+	entries, err := os.ReadDir(raw)
+	if err != nil {
+		t.Fatalf("ReadDir returned error: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".tmp") {
+			t.Errorf("a temporary file stayed behind: %s", entry.Name())
+		}
 	}
 }

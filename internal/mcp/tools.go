@@ -4,41 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/zarathos364/opencode-memory/internal/indexer"
 	"github.com/zarathos364/opencode-memory/internal/service"
 	"github.com/zarathos364/opencode-memory/internal/storage"
 )
-
-// memory mirrors the CLI output shape, so a model parses either the same way.
-// It lives here and not in one shared place because the command side is
-// package main, which nothing may import.
-type memory struct {
-	ID        string   `json:"id"`
-	CreatedAt string   `json:"created_at"`
-	Title     string   `json:"title"`
-	Tags      []string `json:"tags"`
-	Sensitive bool     `json:"sensitive"`
-	Content   string   `json:"content"`
-	Score     float64  `json:"score,omitempty"`
-}
-
-func toMemory(m *storage.Memory, score float64) memory {
-	tags := m.Tags
-	if tags == nil {
-		tags = []string{}
-	}
-	return memory{
-		ID:        m.ID,
-		CreatedAt: m.CreatedAt.UTC().Format(time.RFC3339Nano),
-		Title:     m.Title,
-		Tags:      tags,
-		Sensitive: m.Sensitive,
-		Content:   m.Content,
-		Score:     score,
-	}
-}
 
 type definition struct {
 	Name        string         `json:"name"`
@@ -213,7 +183,7 @@ func (s *Server) toolAdd(args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return toMemory(created, 0), nil
+		return service.NewMemoryJSON(created, 0), nil
 	})
 }
 
@@ -232,11 +202,7 @@ func (s *Server) toolSearch(args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		out := make([]memory, 0, len(results))
-		for _, result := range results {
-			out = append(out, toMemory(result.Memory, result.Score))
-		}
-		return out, nil
+		return service.NewMemoryJSONResults(results), nil
 	})
 }
 
@@ -251,14 +217,7 @@ func (s *Server) toolList(args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		out := make([]memory, 0, len(memories))
-		for _, m := range memories {
-			if m.Sensitive && !showSensitive {
-				continue
-			}
-			out = append(out, toMemory(m, 0))
-		}
-		return out, nil
+		return service.NewMemoryJSONList(service.VisibleMemories(memories, showSensitive)), nil
 	})
 }
 
@@ -273,7 +232,7 @@ func (s *Server) toolGet(args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return toMemory(m, 0), nil
+		return service.NewMemoryJSON(m, 0), nil
 	})
 }
 
@@ -358,7 +317,7 @@ func (s *Server) toolUpdate(args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return toMemory(updated, 0), nil
+		return service.NewMemoryJSON(updated, 0), nil
 	})
 }
 
@@ -376,7 +335,7 @@ func (s *Server) toolDelete(args map[string]any) (any, error) {
 	})
 }
 
-func (s *Server) toolReindex(args map[string]any) (any, error) {
+func (s *Server) toolReindex(_ map[string]any) (any, error) {
 	return s.withStore(func(svc *service.MemoryService) (any, error) {
 		stored, err := svc.Reindex()
 		if err != nil {

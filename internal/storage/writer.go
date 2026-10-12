@@ -67,9 +67,12 @@ func (w *Writer) store(m *Memory) error {
 	if err := os.MkdirAll(w.rawDir, 0o755); err != nil {
 		return fmt.Errorf("create raw directory: %w", err)
 	}
-	// A sensitive memory stays out of the index but on the disk, so its file
-	// must not stay readable by other users.
-	mode := os.FileMode(0o644)
+	// The mode is requested at creation and the kernel applies the process
+	// umask, so the operator's choice decides the final bits. 0666 is the
+	// conventional base for a data file, the same base touch requests; a
+	// sensitive memory asks for 0600 so it can never gain group or other
+	// access.
+	mode := os.FileMode(0o666)
 	if m.Sensitive {
 		mode = 0o600
 	}
@@ -77,9 +80,9 @@ func (w *Writer) store(m *Memory) error {
 }
 
 func writeAtomic(dir, name, body string, mode os.FileMode) error {
-	tmp, err := os.CreateTemp(dir, "mem-*.tmp")
+	tmp, err := createTemp(dir, name, mode)
 	if err != nil {
-		return fmt.Errorf("create temporary file: %w", err)
+		return err
 	}
 	tmpName := tmp.Name()
 
@@ -92,13 +95,26 @@ func writeAtomic(dir, name, body string, mode os.FileMode) error {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("close temporary file: %w", err)
 	}
-	if err := os.Chmod(tmpName, mode); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("set file mode: %w", err)
-	}
 	if err := os.Rename(tmpName, filepath.Join(dir, name)); err != nil {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("store file: %w", err)
 	}
 	return nil
+}
+
+// createTemp opens a fresh temporary file beside the target, requesting the
+// final mode so the kernel applies the umask at creation. os.CreateTemp cannot
+// be used: it always creates with 0600 and would ignore the request.
+func createTemp(dir, name string, mode os.FileMode) (*os.File, error) {
+	for attempt := 0; attempt < 100; attempt++ {
+		path := filepath.Join(dir, name+"."+uuid.New().String()+".tmp")
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+		if err == nil {
+			return file, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return nil, fmt.Errorf("create temporary file: %w", err)
+		}
+	}
+	return nil, errors.New("create temporary file: no free name")
 }

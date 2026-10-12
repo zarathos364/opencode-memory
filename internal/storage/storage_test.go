@@ -90,14 +90,35 @@ func TestSensitiveFileIsReadableOnlyByItsOwner(t *testing.T) {
 		t.Fatalf("Create returned error: %v", err)
 	}
 
-	for id, want := range map[string]os.FileMode{plain.ID: 0o644, secret.ID: 0o600} {
-		info, err := os.Stat(filepath.Join(raw, id+".md"))
-		if err != nil {
-			t.Fatalf("stat returned error: %v", err)
-		}
-		if got := info.Mode().Perm(); got != want {
-			t.Errorf("mode = %o, want %o", got, want)
-		}
+	// The test cannot read the umask without changing it, so a regular memory
+	// is compared with a control file created the same way.
+	control := filepath.Join(t.TempDir(), "control")
+	file, err := os.OpenFile(control, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)
+	if err != nil {
+		t.Fatalf("creating the control file failed: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("closing the control file failed: %v", err)
+	}
+
+	plainInfo, err := os.Stat(filepath.Join(raw, plain.ID+".md"))
+	if err != nil {
+		t.Fatalf("stat returned error: %v", err)
+	}
+	controlInfo, err := os.Stat(control)
+	if err != nil {
+		t.Fatalf("stat returned error: %v", err)
+	}
+	if got, want := plainInfo.Mode().Perm(), controlInfo.Mode().Perm(); got != want {
+		t.Errorf("mode = %o, want the umask-applied %o", got, want)
+	}
+
+	secretInfo, err := os.Stat(filepath.Join(raw, secret.ID+".md"))
+	if err != nil {
+		t.Fatalf("stat returned error: %v", err)
+	}
+	if got := secretInfo.Mode().Perm(); got&0o077 != 0 {
+		t.Errorf("sensitive mode = %o, want no group or other bits", got)
 	}
 }
 

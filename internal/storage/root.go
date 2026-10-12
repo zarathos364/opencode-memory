@@ -13,6 +13,8 @@ const (
 	RawDirName      = "raw"
 	IndexDirName    = "index"
 
+	ConfigDirName = "opencode"
+
 	// RootEnvVar overrides the store location when no root is given.
 	RootEnvVar = "OPENCODE_MEMORY_ROOT"
 )
@@ -54,10 +56,8 @@ func ResolveRoot(explicit, startDir string) (string, error) {
 		dir = parent
 	}
 
-	// The configuration directory is $XDG_CONFIG_HOME when it is set and
-	// $HOME/.config otherwise, which is where a single store belongs.
 	if configDir, err := os.UserConfigDir(); err == nil {
-		return absolute(filepath.Join(configDir, OpenCodeDirName))
+		return absolute(filepath.Join(configDir, ConfigDirName))
 	}
 	return absolute(filepath.Join(startDir, OpenCodeDirName))
 }

@@ -66,7 +66,7 @@ func TestResolveRootSkipsAConfigurationFolderWithoutMemories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveRoot returned error: %v", err)
 	}
-	want := filepath.Join(configHome, OpenCodeDirName)
+	want := filepath.Join(configHome, "opencode")
 	if got != want {
 		t.Errorf("ResolveRoot = %q, want the configuration directory %q", got, want)
 	}
@@ -121,7 +121,7 @@ func TestResolveRootFallsBackToTheConfigurationDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveRoot returned error: %v", err)
 	}
-	want := filepath.Join(configHome, OpenCodeDirName)
+	want := filepath.Join(configHome, "opencode")
 	if got != want {
 		t.Errorf("ResolveRoot = %q, want the configuration directory %q", got, want)
 	}
@@ -137,7 +137,7 @@ func TestResolveRootUsesTheHomeConfigurationDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveRoot returned error: %v", err)
 	}
-	want := filepath.Join(home, ".config", OpenCodeDirName)
+	want := filepath.Join(home, ".config", "opencode")
 	if got != want {
 		t.Errorf("ResolveRoot = %q, want the home configuration directory %q", got, want)
 	}

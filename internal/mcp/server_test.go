@@ -267,6 +267,20 @@ func TestRoundTripThroughTheTools(t *testing.T) {
 	}
 }
 
+func TestListAndSearchReturnNoBody(t *testing.T) {
+	root := storeRoot(t)
+	replies := serve(t, root,
+		callLine(1, "add", `{"title":"Ferret care","content":"the ferret marker body"}`),
+		callLine(2, "search", `{"query":"ferret"}`),
+		callLine(3, "list", `{}`),
+	)
+	for _, reply := range replies[1:] {
+		if strings.Contains(resultText(t, reply), "the ferret marker body") {
+			t.Errorf("a result carried the body:\n%s", reply)
+		}
+	}
+}
+
 func TestSensitiveMemoryStaysOutOfSearch(t *testing.T) {
 	root := storeRoot(t)
 	replies := serve(t, root,

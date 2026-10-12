@@ -124,7 +124,8 @@ Tags are trimmed, lowercased and de-duplicated before they are stored.
 
 ### search
 
-Find memories by text. Hits are returned strongest first.
+Find memories by text. Hits are returned strongest first. A JSON hit carries
+the title and tags, not the body; use `get` to read one.
 
 ```sh
 $ opencode-memory search "module layout"
@@ -143,7 +144,6 @@ $ opencode-memory search --json "module layout"
       "arch"
     ],
     "sensitive": false,
-    "content": "Keep cmd thin and put logic in internal packages.",
     "score": 1.2837
   }
 ]

@@ -32,7 +32,10 @@ on your own. Nobody will tell you to save.
 
 - Search before you write: `memory_search`. If a memory covers the fact, update
   it with `memory_update`. Never add a near duplicate.
-- Small record: `memory_add` with a short title and tags.
+- Small record: `memory_add` with a short, descriptive title and tags. The
+  title is how you choose a memory later.
+- The search and list results carry the title and tags, not the body. Read the
+  one you pick with `memory_get`.
 - Small change to one memory: `memory_update` with `append` for the end,
   `content` for a replacement.
 - Long bodies: `memory_get` first, then `memory_update` with the full text.

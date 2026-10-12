@@ -144,7 +144,7 @@ func runSearch(args []string, out, errOut io.Writer) error {
 			return err
 		}
 		if *asJSON {
-			return writeJSON(out, service.NewMemoryJSONResults(results))
+			return writeJSON(out, service.NewMemorySummaryResults(results))
 		}
 		for _, result := range results {
 			err := printLine(out, "score=%.4f  id=%s  %s\n", result.Score, result.Memory.ID, result.Memory.Title)
@@ -178,7 +178,7 @@ func runList(args []string, out, errOut io.Writer) error {
 		visible := service.VisibleMemories(memories, *showSensitive)
 
 		if *asJSON {
-			return writeJSON(out, service.NewMemoryJSONList(visible))
+			return writeJSON(out, service.NewMemorySummaryList(visible))
 		}
 		for _, m := range visible {
 			err := printLine(out, "%s  id=%s  %s\n", m.CreatedAt.Format(time.RFC3339), m.ID, m.Title)

@@ -86,12 +86,15 @@ func TestSearchAcceptsJSONAfterTheQuery(t *testing.T) {
 		t.Fatalf("search returned error: %v (%s)", result.err, result.errOut)
 	}
 
-	var hits []service.MemoryJSON
+	var hits []service.MemorySummary
 	if err := json.Unmarshal([]byte(result.out), &hits); err != nil {
 		t.Fatalf("search did not print JSON: %v\n%s", err, result.out)
 	}
 	if len(hits) != 1 {
 		t.Errorf("search returned %d hits, want 1", len(hits))
+	}
+	if strings.Contains(result.out, "the marker word zumbido lives here") {
+		t.Errorf("a search hit carried the body:\n%s", result.out)
 	}
 }
 
@@ -212,19 +215,22 @@ func TestUnknownCommandIsReported(t *testing.T) {
 
 func TestListPrintsJSON(t *testing.T) {
 	root := t.TempDir()
-	createMemory(t, root, "Listed memory", "body")
+	createMemory(t, root, "Listed memory", "the marker word listado lives here")
 
 	result := call(rooted(root, "list", "--json")...)
 	if result.err != nil {
 		t.Fatalf("list returned error: %v (%s)", result.err, result.errOut)
 	}
 
-	var listed []service.MemoryJSON
+	var listed []service.MemorySummary
 	if err := json.Unmarshal([]byte(result.out), &listed); err != nil {
 		t.Fatalf("list did not print JSON: %v\n%s", err, result.out)
 	}
 	if len(listed) != 1 {
 		t.Errorf("list returned %d memories, want 1", len(listed))
+	}
+	if strings.Contains(result.out, "the marker word listado lives here") {
+		t.Errorf("a list entry carried the body:\n%s", result.out)
 	}
 }
 

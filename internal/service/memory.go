@@ -57,20 +57,45 @@ func NewMemoryJSON(m *storage.Memory, score float64) MemoryJSON {
 	}
 }
 
-// NewMemoryJSONList renders memories in order, without scores.
-func NewMemoryJSONList(memories []*storage.Memory) []MemoryJSON {
-	out := make([]MemoryJSON, 0, len(memories))
+// MemorySummary is one memory without its body, for search and list results.
+// The body stays one Get away, so a long result list stays small.
+type MemorySummary struct {
+	ID        string   `json:"id"`
+	CreatedAt string   `json:"created_at"`
+	Title     string   `json:"title"`
+	Tags      []string `json:"tags"`
+	Sensitive bool     `json:"sensitive"`
+	Score     float64  `json:"score,omitempty"`
+}
+
+// NewMemorySummary renders a memory without its body. It starts from the full
+// shape, so the shared fields cannot drift apart.
+func NewMemorySummary(m *storage.Memory, score float64) MemorySummary {
+	full := NewMemoryJSON(m, score)
+	return MemorySummary{
+		ID:        full.ID,
+		CreatedAt: full.CreatedAt,
+		Title:     full.Title,
+		Tags:      full.Tags,
+		Sensitive: full.Sensitive,
+		Score:     full.Score,
+	}
+}
+
+// NewMemorySummaryList renders memories in order, without scores.
+func NewMemorySummaryList(memories []*storage.Memory) []MemorySummary {
+	out := make([]MemorySummary, 0, len(memories))
 	for _, m := range memories {
-		out = append(out, NewMemoryJSON(m, 0))
+		out = append(out, NewMemorySummary(m, 0))
 	}
 	return out
 }
 
-// NewMemoryJSONResults renders search results with their scores.
-func NewMemoryJSONResults(results []Result) []MemoryJSON {
-	out := make([]MemoryJSON, 0, len(results))
+// NewMemorySummaryResults renders search results with their scores.
+func NewMemorySummaryResults(results []Result) []MemorySummary {
+	out := make([]MemorySummary, 0, len(results))
 	for _, result := range results {
-		out = append(out, NewMemoryJSON(result.Memory, result.Score))
+		out = append(out, NewMemorySummary(result.Memory, result.Score))
 	}
 	return out
 }

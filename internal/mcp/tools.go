@@ -31,7 +31,7 @@ func toolDefinitions() []definition {
 			Name:        "add",
 			Description: "Store a new memory and return it.",
 			InputSchema: schema([]string{"title", "content"}, map[string]any{
-				"title":     map[string]any{"type": "string", "description": "Short title."},
+				"title":     map[string]any{"type": "string", "description": "Short, descriptive title."},
 				"content":   text,
 				"tags":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 				"sensitive": map[string]any{"type": "boolean", "description": "Store without making it searchable."},
@@ -39,7 +39,7 @@ func toolDefinitions() []definition {
 		},
 		{
 			Name:        "search",
-			Description: "Find memories by their text, best matches first.",
+			Description: "Find memories by their text, best matches first. A result carries the title and tags, not the body.",
 			InputSchema: schema([]string{"query"}, map[string]any{
 				"query": map[string]any{"type": "string", "description": "Search query."},
 				"limit": map[string]any{"type": "integer", "description": "Maximum number of results."},
@@ -47,7 +47,7 @@ func toolDefinitions() []definition {
 		},
 		{
 			Name:        "list",
-			Description: "List stored memories, oldest first.",
+			Description: "List stored memories, oldest first. An entry carries the title and tags, not the body.",
 			InputSchema: schema([]string{}, map[string]any{
 				"sensitive": map[string]any{"type": "boolean", "description": "Include memories kept out of search."},
 			}),
@@ -202,7 +202,7 @@ func (s *Server) toolSearch(args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return service.NewMemoryJSONResults(results), nil
+		return service.NewMemorySummaryResults(results), nil
 	})
 }
 
@@ -217,7 +217,7 @@ func (s *Server) toolList(args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return service.NewMemoryJSONList(service.VisibleMemories(memories, showSensitive)), nil
+		return service.NewMemorySummaryList(service.VisibleMemories(memories, showSensitive)), nil
 	})
 }
 

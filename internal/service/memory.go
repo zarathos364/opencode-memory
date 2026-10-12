@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/zarathos364/opencode-memory/internal/indexer"
 	"github.com/zarathos364/opencode-memory/internal/storage"
 )
 
-// MemoryService runs the operations a caller needs, on top of storage and the
-// search index.
 type MemoryService struct {
 	writer   *storage.Writer
 	reader   *storage.Reader
@@ -23,10 +22,69 @@ type MemoryService struct {
 	closed bool
 }
 
-// Result is one search hit together with its stored memory.
 type Result struct {
 	Memory *storage.Memory
 	Score  float64
+}
+
+// MemoryJSON is one memory as data, for CLI output and tool results alike.
+// Sharing it keeps both shapes from drifting apart.
+type MemoryJSON struct {
+	ID        string   `json:"id"`
+	CreatedAt string   `json:"created_at"`
+	Title     string   `json:"title"`
+	Tags      []string `json:"tags"`
+	Sensitive bool     `json:"sensitive"`
+	Content   string   `json:"content"`
+	Score     float64  `json:"score,omitempty"`
+}
+
+// NewMemoryJSON renders a memory with its creation time in UTC and an empty
+// tag list instead of null, so every consumer prints the same bytes.
+func NewMemoryJSON(m *storage.Memory, score float64) MemoryJSON {
+	tags := m.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	return MemoryJSON{
+		ID:        m.ID,
+		CreatedAt: m.CreatedAt.UTC().Format(time.RFC3339Nano),
+		Title:     m.Title,
+		Tags:      tags,
+		Sensitive: m.Sensitive,
+		Content:   m.Content,
+		Score:     score,
+	}
+}
+
+// NewMemoryJSONList renders memories in order, without scores.
+func NewMemoryJSONList(memories []*storage.Memory) []MemoryJSON {
+	out := make([]MemoryJSON, 0, len(memories))
+	for _, m := range memories {
+		out = append(out, NewMemoryJSON(m, 0))
+	}
+	return out
+}
+
+// NewMemoryJSONResults renders search results with their scores.
+func NewMemoryJSONResults(results []Result) []MemoryJSON {
+	out := make([]MemoryJSON, 0, len(results))
+	for _, result := range results {
+		out = append(out, NewMemoryJSON(result.Memory, result.Score))
+	}
+	return out
+}
+
+// VisibleMemories drops sensitive memories unless they were asked for.
+func VisibleMemories(memories []*storage.Memory, showSensitive bool) []*storage.Memory {
+	out := make([]*storage.Memory, 0, len(memories))
+	for _, m := range memories {
+		if m.Sensitive && !showSensitive {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // Patch lists the fields an update replaces. A field left nil keeps its value.
@@ -73,7 +131,6 @@ func (s *MemoryService) Close() error {
 	return s.index.Close()
 }
 
-// checkOpen refuses work on a service that no longer holds its index.
 func (s *MemoryService) checkOpen() error {
 	if s.closed {
 		return errors.New("service is closed")
@@ -97,7 +154,6 @@ func (s *MemoryService) Create(title, content string, tags []string, sensitive b
 	return m, nil
 }
 
-// Get loads one memory.
 func (s *MemoryService) Get(id string) (*storage.Memory, error) {
 	if err := s.checkOpen(); err != nil {
 		return nil, err
@@ -105,7 +161,6 @@ func (s *MemoryService) Get(id string) (*storage.Memory, error) {
 	return s.reader.Get(id)
 }
 
-// List loads every memory in creation order.
 func (s *MemoryService) List() ([]*storage.Memory, error) {
 	if err := s.checkOpen(); err != nil {
 		return nil, err

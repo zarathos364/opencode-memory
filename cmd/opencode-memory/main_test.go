@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zarathos364/opencode-memory/internal/service"
 )
 
 // rooted puts the store flag right after the command so that a test about the
@@ -44,7 +46,7 @@ func storedBody(t *testing.T, root, id string) string {
 	if shown.err != nil {
 		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
 	}
-	var one memoryJSON
+	var one service.MemoryJSON
 	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
 		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
 	}
@@ -84,7 +86,7 @@ func TestSearchAcceptsJSONAfterTheQuery(t *testing.T) {
 		t.Fatalf("search returned error: %v (%s)", result.err, result.errOut)
 	}
 
-	var hits []memoryJSON
+	var hits []service.MemoryJSON
 	if err := json.Unmarshal([]byte(result.out), &hits); err != nil {
 		t.Fatalf("search did not print JSON: %v\n%s", err, result.out)
 	}
@@ -217,7 +219,7 @@ func TestListPrintsJSON(t *testing.T) {
 		t.Fatalf("list returned error: %v (%s)", result.err, result.errOut)
 	}
 
-	var listed []memoryJSON
+	var listed []service.MemoryJSON
 	if err := json.Unmarshal([]byte(result.out), &listed); err != nil {
 		t.Fatalf("list did not print JSON: %v\n%s", err, result.out)
 	}
@@ -288,7 +290,7 @@ func TestGetPrintsJSONWithTheWholeBody(t *testing.T) {
 		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
 	}
 
-	var one memoryJSON
+	var one service.MemoryJSON
 	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
 		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
 	}
@@ -325,7 +327,7 @@ func TestUpdateReadsTheBodyFromAFile(t *testing.T) {
 	if shown.err != nil {
 		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
 	}
-	var one, original memoryJSON
+	var one, original service.MemoryJSON
 	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
 		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
 	}
@@ -442,7 +444,7 @@ func TestUpdateAppendsTextToTheBody(t *testing.T) {
 	if shown.err != nil {
 		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
 	}
-	var one, original memoryJSON
+	var one, original service.MemoryJSON
 	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
 		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
 	}
@@ -612,5 +614,13 @@ func TestUpdateRejectsAnAdditionWithAReplacement(t *testing.T) {
 				t.Errorf("body = %q, want it untouched, %q", got, body)
 			}
 		})
+	}
+}
+
+func TestReindexRejectsPositionalArguments(t *testing.T) {
+	root := t.TempDir()
+	result := call(rooted(root, "reindex", "junk")...)
+	if result.err == nil {
+		t.Fatal("reindex accepted a positional argument")
 	}
 }

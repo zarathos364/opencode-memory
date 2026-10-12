@@ -41,21 +41,10 @@ Run 'opencode-memory COMMAND --help' to see that command's options.
   -h, --help       display this help and exit
 `
 
-// errHelp stands for the help requested through a command flag.
 var errHelp = errors.New("help requested")
 
 // Replaced at build time through the linker.
 var version = "dev"
-
-type memoryJSON struct {
-	ID        string   `json:"id"`
-	CreatedAt string   `json:"created_at"`
-	Title     string   `json:"title"`
-	Tags      []string `json:"tags"`
-	Sensitive bool     `json:"sensitive"`
-	Content   string   `json:"content"`
-	Score     float64  `json:"score,omitempty"`
-}
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
@@ -155,7 +144,7 @@ func runSearch(args []string, out, errOut io.Writer) error {
 			return err
 		}
 		if *asJSON {
-			return writeJSON(out, toSearchJSON(results))
+			return writeJSON(out, service.NewMemoryJSONResults(results))
 		}
 		for _, result := range results {
 			err := printLine(out, "score=%.4f  id=%s  %s\n", result.Score, result.Memory.ID, result.Memory.Title)
@@ -186,16 +175,10 @@ func runList(args []string, out, errOut io.Writer) error {
 			return err
 		}
 
-		visible := make([]*storage.Memory, 0, len(memories))
-		for _, m := range memories {
-			if m.Sensitive && !*showSensitive {
-				continue
-			}
-			visible = append(visible, m)
-		}
+		visible := service.VisibleMemories(memories, *showSensitive)
 
 		if *asJSON {
-			return writeJSON(out, toMemoryJSON(visible))
+			return writeJSON(out, service.NewMemoryJSONList(visible))
 		}
 		for _, m := range visible {
 			err := printLine(out, "%s  id=%s  %s\n", m.CreatedAt.Format(time.RFC3339), m.ID, m.Title)
@@ -224,7 +207,7 @@ func runGet(args []string, out, errOut io.Writer) error {
 			return err
 		}
 		if *asJSON {
-			return writeJSON(out, newMemoryJSON(m, 0))
+			return writeJSON(out, service.NewMemoryJSON(m, 0))
 		}
 		return printLine(out, "id: %s\ntitle: %s\ncreated: %s\ntags: %s\nsensitive: %t\n\n%s\n",
 			m.ID, m.Title, m.CreatedAt.Format(time.RFC3339), strings.Join(m.Tags, ", "), m.Sensitive, m.Content)
@@ -349,6 +332,9 @@ func runReindex(args []string, out, errOut io.Writer) error {
 	root := flags.String("root", "", "store location")
 	if err := parseFlags(flags, args); err != nil {
 		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("reindex takes no arguments")
 	}
 
 	return withService(*root, func(svc *service.MemoryService) error {
@@ -502,17 +488,16 @@ func indexFailure(root string, err error) error {
 func warnIfOutOfSync(svc *service.MemoryService, errOut io.Writer) error {
 	consistent, err := svc.Consistent()
 	if err != nil {
-		_, err = fmt.Fprintln(errOut, "warning: the search index cannot be checked, run 'opencode-memory reindex'")
-		if err != nil {
-			return fmt.Errorf("write warning: %w", err)
-		}
-		return nil
+		return warn(errOut, "warning: the search index cannot be checked, run 'opencode-memory reindex'")
 	}
 	if consistent {
 		return nil
 	}
-	_, err = fmt.Fprintln(errOut, "warning: the search index is out of sync, run 'opencode-memory reindex'")
-	if err != nil {
+	return warn(errOut, "warning: the search index is out of sync, run 'opencode-memory reindex'")
+}
+
+func warn(errOut io.Writer, message string) error {
+	if _, err := fmt.Fprintln(errOut, message); err != nil {
 		return fmt.Errorf("write warning: %w", err)
 	}
 	return nil
@@ -537,34 +522,6 @@ func splitTags(raw string) []string {
 		return nil
 	}
 	return strings.Split(raw, ",")
-}
-
-func newMemoryJSON(m *storage.Memory, score float64) memoryJSON {
-	return memoryJSON{
-		ID:        m.ID,
-		CreatedAt: m.CreatedAt.Format(time.RFC3339Nano),
-		Title:     m.Title,
-		Tags:      m.Tags,
-		Sensitive: m.Sensitive,
-		Content:   m.Content,
-		Score:     score,
-	}
-}
-
-func toMemoryJSON(memories []*storage.Memory) []memoryJSON {
-	out := make([]memoryJSON, 0, len(memories))
-	for _, m := range memories {
-		out = append(out, newMemoryJSON(m, 0))
-	}
-	return out
-}
-
-func toSearchJSON(results []service.Result) []memoryJSON {
-	out := make([]memoryJSON, 0, len(results))
-	for _, result := range results {
-		out = append(out, newMemoryJSON(result.Memory, result.Score))
-	}
-	return out
 }
 
 func writeJSON(out io.Writer, value any) error {

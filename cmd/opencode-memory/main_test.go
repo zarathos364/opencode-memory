@@ -147,6 +147,76 @@ func TestAddAcceptsSensitiveAfterTheText(t *testing.T) {
 	}
 }
 
+// TestARoundTripThroughTheCLI walks add, search, get and delete through the
+// command layer with a real store.
+func TestARoundTripThroughTheCLI(t *testing.T) {
+	root := t.TempDir()
+
+	created := call(rooted(root, "add", "--title", "Ferret care", "how to look after a ferret")...)
+	if created.err != nil {
+		t.Fatalf("add returned error: %v (%s)", created.err, created.errOut)
+	}
+	id := strings.TrimSpace(created.out)
+
+	found := call(rooted(root, "search", "ferret", "--json")...)
+	if found.err != nil {
+		t.Fatalf("search returned error: %v (%s)", found.err, found.errOut)
+	}
+	var hits []service.MemoryJSON
+	if err := json.Unmarshal([]byte(found.out), &hits); err != nil {
+		t.Fatalf("search did not print JSON: %v\n%s", err, found.out)
+	}
+	if len(hits) != 1 || hits[0].ID != id {
+		t.Fatalf("search returned %v, want the memory %s", hits, id)
+	}
+
+	shown := call(rooted(root, "get", id, "--json")...)
+	if shown.err != nil {
+		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
+	}
+	var memory service.MemoryJSON
+	if err := json.Unmarshal([]byte(shown.out), &memory); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
+	}
+	if memory.Content != "how to look after a ferret" {
+		t.Errorf("content = %q, want the stored body", memory.Content)
+	}
+
+	deleted := call(rooted(root, "delete", id)...)
+	if deleted.err != nil {
+		t.Fatalf("delete returned error: %v (%s)", deleted.err, deleted.errOut)
+	}
+	if strings.TrimSpace(deleted.out) != "deleted "+id {
+		t.Errorf("delete printed %q, want the confirmation", deleted.out)
+	}
+}
+
+func TestUpdateClearsSensitiveWithAFalseFlag(t *testing.T) {
+	root := t.TempDir()
+	created := call(rooted(root, "add", "--title", "Hidden memory", "secret marker word sigilo", "--sensitive")...)
+	if created.err != nil {
+		t.Fatalf("add returned error: %v (%s)", created.err, created.errOut)
+	}
+	id := strings.TrimSpace(created.out)
+
+	updated := call(rooted(root, "update", "--sensitive=false", id)...)
+	if updated.err != nil {
+		t.Fatalf("update returned error: %v (%s)", updated.err, updated.errOut)
+	}
+
+	shown := call(rooted(root, "get", id, "--json")...)
+	if shown.err != nil {
+		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
+	}
+	var memory service.MemoryJSON
+	if err := json.Unmarshal([]byte(shown.out), &memory); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
+	}
+	if memory.Sensitive {
+		t.Error("sensitive = true after --sensitive=false, want false")
+	}
+}
+
 func TestUnknownFlagIsStillReported(t *testing.T) {
 	root := t.TempDir()
 

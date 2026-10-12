@@ -7,7 +7,6 @@ import (
 
 	"github.com/zarathos364/opencode-memory/internal/indexer"
 	"github.com/zarathos364/opencode-memory/internal/service"
-	"github.com/zarathos364/opencode-memory/internal/storage"
 )
 
 type definition struct {
@@ -63,13 +62,12 @@ func toolDefinitions() []definition {
 			Name:        "update",
 			Description: "Change part of a memory while keeping its id and creation time. One body source per call.",
 			InputSchema: schema([]string{"id"}, map[string]any{
-				"id":          map[string]any{"type": "string", "description": "Memory identifier."},
-				"content":     map[string]any{"type": "string", "description": "Replace the body."},
-				"append":      map[string]any{"type": "string", "description": "Add text to the end of the body."},
-				"append-from": map[string]any{"type": "string", "description": "Add the end of the body from a file."},
-				"title":       map[string]any{"type": "string", "description": "Replace the title."},
-				"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Replace the tags."},
-				"sensitive":   map[string]any{"type": "boolean", "description": "Replace the sensitive flag."},
+				"id":        map[string]any{"type": "string", "description": "Memory identifier."},
+				"content":   map[string]any{"type": "string", "description": "Replace the body."},
+				"append":    map[string]any{"type": "string", "description": "Add text to the end of the body."},
+				"title":     map[string]any{"type": "string", "description": "Replace the title."},
+				"tags":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Replace the tags."},
+				"sensitive": map[string]any{"type": "boolean", "description": "Replace the sensitive flag."},
 			}),
 		},
 		{
@@ -249,19 +247,15 @@ func (s *Server) toolUpdate(args map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	appendPath, hasAppendFrom, err := optString(args, "append-from")
-	if err != nil {
-		return nil, err
-	}
 	// One body source per call, like the CLI.
 	sources := 0
-	for _, has := range []bool{hasContent, hasAppend, hasAppendFrom} {
+	for _, has := range []bool{hasContent, hasAppend} {
 		if has {
 			sources++
 		}
 	}
 	if sources > 1 {
-		return nil, fmt.Errorf("update takes one of content, append or append-from, not several")
+		return nil, fmt.Errorf("update takes one of content or append, not several")
 	}
 	if hasAppend && strings.TrimSpace(addition) == "" {
 		return nil, fmt.Errorf("update append holds no text")
@@ -295,13 +289,6 @@ func (s *Server) toolUpdate(args map[string]any) (any, error) {
 	}
 	if hasContent {
 		patch.Content = &content
-	}
-	if hasAppendFrom {
-		text, err := storage.ReadBody(appendPath)
-		if err != nil {
-			return nil, err
-		}
-		addition, hasAppend = text, true
 	}
 
 	return s.withStore(func(svc *service.MemoryService) (any, error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -185,6 +186,56 @@ func TestToolsListReturnsSevenTools(t *testing.T) {
 		if !seen {
 			t.Errorf("tool %q is missing", name)
 		}
+	}
+}
+
+func TestUpdateToolTakesNoFilePath(t *testing.T) {
+	replies := serve(t, storeRoot(t), requestLine(1, "tools/list", ""))
+	reply := decodeReply(t, replies[0])
+	result, _ := reply["result"].(map[string]any)
+	tools, _ := result["tools"].([]any)
+	for _, item := range tools {
+		tool, _ := item.(map[string]any)
+		if tool["name"] != "update" {
+			continue
+		}
+		schema, _ := tool["inputSchema"].(map[string]any)
+		properties, _ := schema["properties"].(map[string]any)
+		if _, ok := properties["append-from"]; ok {
+			t.Error("the update tool still advertises append-from")
+		}
+		return
+	}
+	t.Fatal("tools/list returned no update tool")
+}
+
+func TestUpdateToolDoesNotReadAFile(t *testing.T) {
+	root := storeRoot(t)
+	secret := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(secret, []byte("the secret body"), 0o600); err != nil {
+		t.Fatalf("write the file: %v", err)
+	}
+
+	replies := serve(t, root, callLine(1, "add", `{"title":"Ferret care","content":"kept body"}`))
+	var added map[string]any
+	if err := json.Unmarshal([]byte(resultText(t, replies[0])), &added); err != nil {
+		t.Fatalf("add did not return JSON: %v", err)
+	}
+	id, _ := added["id"].(string)
+
+	replies = serve(t, root,
+		callLine(2, "update", fmt.Sprintf(`{"id":%q,"append-from":%q}`, id, secret)),
+		callLine(3, "get", fmt.Sprintf(`{"id":%q}`, id)),
+	)
+	if text := errorText(t, replies[0]); !strings.Contains(text, "field to change") {
+		t.Errorf("update with append-from returned %q, want it refused as an unknown field", text)
+	}
+	var fetched map[string]any
+	if err := json.Unmarshal([]byte(resultText(t, replies[1])), &fetched); err != nil {
+		t.Fatalf("get did not return JSON: %v", err)
+	}
+	if fetched["content"] != "kept body" {
+		t.Errorf("content = %q, want the body unchanged", fetched["content"])
 	}
 }
 

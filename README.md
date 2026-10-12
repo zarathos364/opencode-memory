@@ -213,10 +213,11 @@ memories.
 
 Every command accepts `--root DIR`. Without it, the tool resolves the store
 in this order. It uses `OPENCODE_MEMORY_ROOT` when you set it. Otherwise it
-walks up to the closest `.opencode` directory that holds a `memories`
-directory. A project folder that only carries the `.opencode` name is a
-setting, not a store, so the walk up skips it. When no project store is
-found, the tool uses the `opencode` directory under `$XDG_CONFIG_HOME`, or
+walks up to the closest `.opencode` directory that holds a memory file. A
+project folder that only carries the `.opencode` name is a setting, not a
+store, so the walk up skips it. A store left empty by a probe is skipped too.
+
+When no project store is found, the tool uses the `opencode` directory under `$XDG_CONFIG_HOME`, or
 under `$HOME/.config` when that variable is not set.
 
 The tool refuses an explicit root that does not exist, so a stale setting can

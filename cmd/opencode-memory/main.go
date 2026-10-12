@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/zarathos364/opencode-memory/internal/indexer"
+	"github.com/zarathos364/opencode-memory/internal/mcp"
 	"github.com/zarathos364/opencode-memory/internal/service"
 	"github.com/zarathos364/opencode-memory/internal/storage"
 )
@@ -28,9 +29,10 @@ Commands:
   update    change part of a memory
   delete    remove one memory
   reindex   rebuild the index from the stored files
+  serve     expose the store to agents over MCP
 
-Every command accepts --root DIR to pick the store; otherwise the closest
-.opencode directory above the working directory is used.
+Every command accepts --root DIR to pick the store; otherwise the store is
+resolved automatically, falling back to the shared store.
 
 Run 'opencode-memory COMMAND --help' to see that command's options.
 
@@ -86,6 +88,8 @@ func run(args []string, out, errOut io.Writer) error {
 		err = runDelete(rest, out, errOut)
 	case "reindex":
 		err = runReindex(rest, out, errOut)
+	case "serve":
+		err = runServe(rest, out, errOut)
 	case "--version":
 		return printLine(out, "opencode-memory %s\n", version)
 	case "help", "-h", "--help":
@@ -275,7 +279,7 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 	// The file is read before the store is opened, so a bad path fails without
 	// touching a stored memory.
 	if *contentFrom != "" {
-		body, err := readBody(*contentFrom)
+		body, err := storage.ReadBody(*contentFrom)
 		if err != nil {
 			return err
 		}
@@ -294,7 +298,7 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 		}
 		addition = *appendText
 	} else if set["append-from"] {
-		text, err := readBody(*appendFrom)
+		text, err := storage.ReadBody(*appendFrom)
 		if err != nil {
 			return err
 		}
@@ -310,13 +314,7 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 			if err != nil {
 				return err
 			}
-			// The addition starts on its own line. A body that already ends
-			// its line needs no second newline.
-			joined := current.Content
-			if !strings.HasSuffix(joined, "\n") {
-				joined += "\n"
-			}
-			joined += addition
+			joined := service.AppendBody(current.Content, addition)
 			patch.Content = &joined
 		}
 		updated, err := svc.Update(flags.Arg(0), patch)
@@ -359,6 +357,25 @@ func runReindex(args []string, out, errOut io.Writer) error {
 		}
 		return printLine(out, "reindexed %d memories\n", stored)
 	})
+}
+
+func runServe(args []string, out, errOut io.Writer) error {
+	flags := newFlagSet("serve", errOut)
+	root := flags.String("root", "", "store location")
+	if err := parseFlags(flags, args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("serve takes no arguments")
+	}
+
+	// The root is resolved once, up front: a server that cannot find its store
+	// must fail before the first tool call, not during it.
+	resolved, err := resolveRoot(*root)
+	if err != nil {
+		return err
+	}
+	return mcp.Serve(os.Stdin, out, resolved, version)
 }
 
 func newFlagSet(name string, errOut io.Writer) *flag.FlagSet {
@@ -441,11 +458,7 @@ func withService(root string, work func(*service.MemoryService) error) error {
 // openService resolves the store location and opens it, turning the two failures
 // that need an explanation into a message a caller can act on.
 func openService(root string) (*service.MemoryService, error) {
-	start, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("read working directory: %w", err)
-	}
-	resolved, err := storage.ResolveRoot(root, start)
+	resolved, err := resolveRoot(root)
 	if err != nil {
 		return nil, err
 	}
@@ -458,6 +471,16 @@ func openService(root string) (*service.MemoryService, error) {
 		return nil, indexFailure(resolved, err)
 	}
 	return svc, nil
+}
+
+// resolveRoot picks the store location from the flag, the environment and the
+// working directory, without opening anything.
+func resolveRoot(root string) (string, error) {
+	start, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("read working directory: %w", err)
+	}
+	return storage.ResolveRoot(root, start)
 }
 
 // indexFailure says where the index lives and which step failed. Removing the
@@ -507,21 +530,6 @@ func splitTags(raw string) []string {
 		return nil
 	}
 	return strings.Split(raw, ",")
-}
-
-// readBody loads a new memory body from a file. Every failure names the path,
-// and a file that holds no text is refused, so an interrupted edit cannot
-// replace a stored memory with nothing.
-func readBody(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read body from %s: %w", path, err)
-	}
-	body := string(data)
-	if strings.TrimSpace(body) == "" {
-		return "", fmt.Errorf("body in %s is empty", path)
-	}
-	return body, nil
 }
 
 func newMemoryJSON(m *storage.Memory, score float64) memoryJSON {

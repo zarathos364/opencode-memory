@@ -9,6 +9,10 @@
 !/pkg/
 !/scripts/
 
+!/.opencode/
+/.opencode/*
+!/.opencode/skills
+
 # files
 !/.gitattributes
 !/.gitignore

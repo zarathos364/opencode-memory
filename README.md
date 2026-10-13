@@ -125,7 +125,7 @@ Tags are trimmed, lowercased and de-duplicated before they are stored.
 ### search
 
 Find memories by text. Hits are returned strongest first. A JSON hit carries
-the title and tags, not the body; use `get` to read one.
+the title and tags, not the body. Use `get` to read one.
 
 ```sh
 $ opencode-memory search "module layout"
@@ -333,11 +333,13 @@ Configure it in `opencode.jsonc`, globally or per project:
 }
 ```
 
-The seven tools are `memory_add`, `memory_search`, `memory_list`,
+The tools are `memory_add`, `memory_search`, `memory_list`,
 `memory_get`, `memory_update`, `memory_delete` and `memory_reindex`. They take
-the same fields as the matching commands. Copy `docs/MCP_INSTRUCTION.md`
-into your `AGENTS.md` so the agent keeps its own memory. The
-server shows up in `opencode mcp list` once configured.
+the same fields as the matching commands. The server shows up in
+`opencode mcp list` once configured.
+
+See `docs/MCP_INSTRUCTION.md` to teach an agent the tools and to make it keep
+its own memory.
 
 ## Problems and fixes
 

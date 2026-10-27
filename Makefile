@@ -1,6 +1,6 @@
 BINDIR  := $(CURDIR)/bin
 BINNAME ?= opencode-memory
-VERSION ?= 0.0.4
+VERSION ?= 0.0.5
 
 # GO OPTIONS
 LDFLAGS     := -w -s -X main.version=$(VERSION)

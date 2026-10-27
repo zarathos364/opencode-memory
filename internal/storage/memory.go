@@ -18,6 +18,7 @@ type Memory struct {
 	SchemaVersion int
 	ID            string
 	CreatedAt     time.Time
+	UpdatedAt     time.Time
 	Tags          []string
 	Sensitive     bool
 	Title         string
@@ -28,6 +29,7 @@ type header struct {
 	SchemaVersion int      `yaml:"schema_version"`
 	ID            string   `yaml:"id"`
 	CreatedAt     string   `yaml:"created_at"`
+	UpdatedAt     string   `yaml:"updated_at,omitempty"`
 	Tags          []string `yaml:"tags"`
 	Sensitive     bool     `yaml:"sensitive"`
 	Title         string   `yaml:"title"`
@@ -88,10 +90,15 @@ func (m *Memory) marshalFile() (string, error) {
 	if tags == nil {
 		tags = []string{}
 	}
+	updated := m.UpdatedAt
+	if updated.IsZero() {
+		updated = m.CreatedAt
+	}
 	body, err := yaml.Marshal(header{
 		SchemaVersion: m.SchemaVersion,
 		ID:            m.ID,
 		CreatedAt:     m.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:     updated.UTC().Format(time.RFC3339Nano),
 		Tags:          tags,
 		Sensitive:     m.Sensitive,
 		Title:         m.Title,
@@ -121,6 +128,15 @@ func parseFile(file string) (*Memory, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse creation time: %w", err)
 	}
+	// A file written before the update time existed carries no such field, and
+	// its creation time is the best available answer.
+	updated := created
+	if h.UpdatedAt != "" {
+		updated, err = time.Parse(time.RFC3339, h.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse update time: %w", err)
+		}
+	}
 
 	// The writer stores a blank line after the header and one newline after the
 	// body, so exactly one of each is removed to keep the body unchanged.
@@ -135,6 +151,7 @@ func parseFile(file string) (*Memory, error) {
 		SchemaVersion: h.SchemaVersion,
 		ID:            h.ID,
 		CreatedAt:     created,
+		UpdatedAt:     updated,
 		Tags:          tags,
 		Sensitive:     h.Sensitive,
 		Title:         h.Title,

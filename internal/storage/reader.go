@@ -37,6 +37,11 @@ func (r *Reader) Get(id string) (*Memory, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse memory %q: %w", clean, err)
 	}
+	// A header that disagrees with its file name would make a later write land
+	// on a different memory, so it is treated as a broken file.
+	if m.ID != clean {
+		return nil, fmt.Errorf("memory %q holds id %q; the file name and the header disagree", clean, m.ID)
+	}
 	return m, nil
 }
 

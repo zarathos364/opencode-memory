@@ -320,6 +320,42 @@ func TestRoundTripThroughTheTools(t *testing.T) {
 	}
 }
 
+func TestUpdateToolReplacesAPassage(t *testing.T) {
+	root := storeRoot(t)
+	added := serve(t, root, callLine(1, "add", `{"title":"Editable","content":"alpha beta gamma"}`))
+	var created map[string]any
+	if err := json.Unmarshal([]byte(resultText(t, added[0])), &created); err != nil {
+		t.Fatalf("add did not return JSON: %v", err)
+	}
+	id, _ := created["id"].(string)
+
+	replies := serve(t, root,
+		callLine(1, "update", `{"id":"`+id+`","replace":"beta","with":"BETA"}`),
+		callLine(2, "get", `{"id":"`+id+`"}`),
+		callLine(3, "update", `{"id":"`+id+`","replace":"BETA"}`),
+	)
+	var updated map[string]any
+	if err := json.Unmarshal([]byte(resultText(t, replies[0])), &updated); err != nil {
+		t.Fatalf("update did not return JSON: %v", err)
+	}
+	if updated["content"] != "alpha BETA gamma" {
+		t.Errorf("update returned %q, want the replaced body", updated["content"])
+	}
+	if updated["updated_at"] == updated["created_at"] {
+		t.Errorf("the update time %v did not move", updated["updated_at"])
+	}
+	var fetched map[string]any
+	if err := json.Unmarshal([]byte(resultText(t, replies[1])), &fetched); err != nil {
+		t.Fatalf("get did not return JSON: %v", err)
+	}
+	if fetched["content"] != "alpha BETA gamma" {
+		t.Errorf("get returned %q, want the replaced body", fetched["content"])
+	}
+	if text := errorText(t, replies[2]); !strings.Contains(text, "with") {
+		t.Errorf("a lone replace returned %q, want it to name with", text)
+	}
+}
+
 func TestListAndSearchReturnNoBody(t *testing.T) {
 	root := storeRoot(t)
 	replies := serve(t, root,

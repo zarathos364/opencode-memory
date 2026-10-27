@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,21 @@ func TestCreateThenSearchFindsTheMemory(t *testing.T) {
 	}
 }
 
+func TestCreateRefusesATitleAlreadyStored(t *testing.T) {
+	svc, _ := newService(t)
+
+	first, err := svc.Create("shell access", "the shell is allowed", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	if _, err := svc.Create("Shell Access", "a second copy", nil, false); err == nil {
+		t.Fatal("Create with a stored title returned nil error, want a refusal")
+	} else if !strings.Contains(err.Error(), first.ID) {
+		t.Errorf("the refusal does not name the stored memory: %v", err)
+	}
+}
+
 func TestSearchPrefersTheCompleteMatch(t *testing.T) {
 	svc, _ := newService(t)
 
@@ -76,6 +92,14 @@ func TestSearchPrefersTheCompleteMatch(t *testing.T) {
 	}
 	if complete[0].Weak {
 		t.Errorf("a result that matched every word is marked weak")
+	}
+
+	encoded, err := json.Marshal(NewMemorySummaryResults(complete))
+	if err != nil {
+		t.Fatalf("marshalling the summary failed: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"weak":false`) {
+		t.Errorf("a complete match does not state weakness as false: %s", encoded)
 	}
 
 	withStopword, err := svc.Search("the shell allowed", 10)
@@ -112,6 +136,13 @@ func TestSearchMarksPartialMatchesAsWeak(t *testing.T) {
 	if len(summaries) != 1 || !summaries[0].Weak {
 		t.Errorf("the summary does not carry the weak mark")
 	}
+	encoded, err := json.Marshal(summaries)
+	if err != nil {
+		t.Fatalf("marshalling the summary failed: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"weak":true`) {
+		t.Errorf("the encoded summary does not carry the weak mark: %s", encoded)
+	}
 }
 
 func TestSearchFallsBackWhenTheStrictHitIsGone(t *testing.T) {
@@ -140,6 +171,221 @@ func TestSearchFallsBackWhenTheStrictHitIsGone(t *testing.T) {
 	}
 	if !results[0].Weak {
 		t.Errorf("the fallback result is not marked weak")
+	}
+}
+
+func TestAHiddenTitleDoesNotAnswerTheUniquenessCheck(t *testing.T) {
+	svc, _ := newService(t)
+
+	if _, err := svc.Create("hidden fact", "secret body", nil, true); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if _, err := svc.Create("Hidden Fact", "public body", nil, false); err != nil {
+		t.Errorf("Create with the title of a sensitive memory returned error: %v", err)
+	}
+}
+
+func TestUpdateRefusesATitleAlreadyStored(t *testing.T) {
+	svc, _ := newService(t)
+
+	first, err := svc.Create("shell access", "the shell is allowed", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	second, err := svc.Create("shell notes", "notes about the shell", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	_, err = svc.Update(second.ID, Patch{Title: toString("  Shell Access  ")})
+	if err == nil {
+		t.Fatal("Update to a stored title returned nil error, want a refusal")
+	}
+	if !strings.Contains(err.Error(), first.ID) {
+		t.Errorf("the refusal does not name the other memory: %v", err)
+	}
+
+	if _, err := svc.Update(first.ID, Patch{Title: toString("Shell Access")}); err != nil {
+		t.Errorf("Update to the memory's own title returned error: %v", err)
+	}
+}
+
+func TestUpdateReplacesOnePassage(t *testing.T) {
+	svc, _ := newService(t)
+
+	created, err := svc.Create("shell notes", "alpha beta gamma", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	updated, err := svc.Update(created.ID, Patch{Replace: &Replacement{Find: "beta", With: "BETA"}})
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if updated.Content != "alpha BETA gamma" {
+		t.Errorf("content = %q, want %q", updated.Content, "alpha BETA gamma")
+	}
+
+	results, err := svc.Search("BETA", 10)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("Search returned %d results after the replacement, want 1", len(results))
+	}
+}
+
+func TestUpdateRefusesAReplacementThatDoesNotFit(t *testing.T) {
+	svc, _ := newService(t)
+
+	created, err := svc.Create("shell notes", "beta and beta again", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	for _, find := range []string{"absent", "beta", "  "} {
+		if _, err := svc.Update(created.ID, Patch{Replace: &Replacement{Find: find, With: "x"}}); err == nil {
+			t.Errorf("Update replacing %q returned nil error, want a refusal", find)
+		}
+	}
+}
+
+func TestUpdateMovesTheUpdateTime(t *testing.T) {
+	svc, _ := newService(t)
+
+	created, err := svc.Create("shell notes", "alpha beta gamma", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if !created.UpdatedAt.Equal(created.CreatedAt) {
+		t.Errorf("a new memory has update time %v, want its creation time %v", created.UpdatedAt, created.CreatedAt)
+	}
+
+	updated, err := svc.Update(created.ID, Patch{Replace: &Replacement{Find: "beta", With: "BETA"}})
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if !updated.UpdatedAt.After(updated.CreatedAt) {
+		t.Errorf("update time %v did not move past the creation time %v", updated.UpdatedAt, updated.CreatedAt)
+	}
+	if !updated.CreatedAt.Equal(created.CreatedAt) {
+		t.Errorf("update moved the creation time to %v", updated.CreatedAt)
+	}
+}
+
+func TestUpdateReplacesAPassageWithNothing(t *testing.T) {
+	svc, _ := newService(t)
+
+	created, err := svc.Create("shell notes", "alpha beta gamma", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	updated, err := svc.Update(created.ID, Patch{Replace: &Replacement{Find: "beta ", With: ""}})
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if updated.Content != "alpha gamma" {
+		t.Errorf("content = %q, want %q", updated.Content, "alpha gamma")
+	}
+}
+
+func TestUpdateReplacesAPassageAcrossLines(t *testing.T) {
+	svc, _ := newService(t)
+
+	created, err := svc.Create("shell notes", "alpha\nbeta\ngamma", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	updated, err := svc.Update(created.ID, Patch{Replace: &Replacement{Find: "beta\ngamma", With: "delta"}})
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if updated.Content != "alpha\ndelta" {
+		t.Errorf("content = %q, want %q", updated.Content, "alpha\ndelta")
+	}
+}
+
+func TestUpdateRefusesToEmptyTheBody(t *testing.T) {
+	svc, _ := newService(t)
+
+	created, err := svc.Create("shell notes", "alpha", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	if _, err := svc.Update(created.ID, Patch{Replace: &Replacement{Find: "alpha", With: ""}}); err == nil {
+		t.Fatal("Update removing the whole body returned nil error, want a refusal")
+	}
+	stored, err := svc.Get(created.ID)
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if stored.Content != "alpha" {
+		t.Errorf("content = %q after a refused update, want it unchanged", stored.Content)
+	}
+}
+
+func TestARefusedUpdateLeavesTheMemoryAlone(t *testing.T) {
+	svc, _ := newService(t)
+
+	created, err := svc.Create("shell notes", "beta and beta again", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	if _, err := svc.Update(created.ID, Patch{Replace: &Replacement{Find: "beta", With: "x"}}); err == nil {
+		t.Fatal("Update with an ambiguous passage returned nil error, want a refusal")
+	}
+
+	stored, err := svc.Get(created.ID)
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if stored.Content != created.Content || !stored.UpdatedAt.Equal(created.UpdatedAt) {
+		t.Errorf("the refused update changed the memory: content %q, updated %v", stored.Content, stored.UpdatedAt)
+	}
+	results, err := svc.Search("beta", 10)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("Search returned %d results after a refused update, want 1", len(results))
+	}
+	consistent, err := svc.Consistent()
+	if err != nil {
+		t.Fatalf("Consistent returned error: %v", err)
+	}
+	if !consistent {
+		t.Error("the index drifted after a refused update")
+	}
+}
+
+func TestTheSummaryCarriesTheUpdateTime(t *testing.T) {
+	svc, _ := newService(t)
+
+	if _, err := svc.Create("shell notes", "alpha beta gamma", nil, false); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	memories, err := svc.List()
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if _, err := svc.Update(memories[0].ID, Patch{Replace: &Replacement{Find: "beta", With: "BETA"}}); err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+
+	memories, err = svc.List()
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	summaries := NewMemorySummaryList(memories)
+	if len(summaries) != 1 {
+		t.Fatalf("List returned %d memories, want 1", len(summaries))
+	}
+	if summaries[0].UpdatedAt == summaries[0].CreatedAt {
+		t.Errorf("the summary still carries the creation time as its update time")
 	}
 }
 

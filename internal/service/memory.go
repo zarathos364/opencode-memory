@@ -33,6 +33,7 @@ type Result struct {
 type MemoryJSON struct {
 	ID        string   `json:"id"`
 	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
 	Title     string   `json:"title"`
 	Tags      []string `json:"tags"`
 	Sensitive bool     `json:"sensitive"`
@@ -40,16 +41,21 @@ type MemoryJSON struct {
 	Score     float64  `json:"score,omitempty"`
 }
 
-// NewMemoryJSON renders a memory with its creation time in UTC and an empty
-// tag list instead of null, so every consumer prints the same bytes.
+// NewMemoryJSON renders a memory with its times in UTC and an empty tag list
+// instead of null, so every consumer prints the same bytes.
 func NewMemoryJSON(m *storage.Memory, score float64) MemoryJSON {
 	tags := m.Tags
 	if tags == nil {
 		tags = []string{}
 	}
+	updated := m.UpdatedAt
+	if updated.IsZero() {
+		updated = m.CreatedAt
+	}
 	return MemoryJSON{
 		ID:        m.ID,
 		CreatedAt: m.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt: updated.UTC().Format(time.RFC3339Nano),
 		Title:     m.Title,
 		Tags:      tags,
 		Sensitive: m.Sensitive,
@@ -63,12 +69,13 @@ func NewMemoryJSON(m *storage.Memory, score float64) MemoryJSON {
 type MemorySummary struct {
 	ID        string   `json:"id"`
 	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
 	Title     string   `json:"title"`
 	Tags      []string `json:"tags"`
 	Sensitive bool     `json:"sensitive"`
 	Score     float64  `json:"score,omitempty"`
 	// Weak marks a partial match, so a ranked list cannot pass for an answer.
-	Weak bool `json:"weak,omitempty"`
+	Weak bool `json:"weak"`
 }
 
 // NewMemorySummary renders a memory without its body. It starts from the full
@@ -78,6 +85,7 @@ func NewMemorySummary(m *storage.Memory, score float64) MemorySummary {
 	return MemorySummary{
 		ID:        full.ID,
 		CreatedAt: full.CreatedAt,
+		UpdatedAt: full.UpdatedAt,
 		Title:     full.Title,
 		Tags:      full.Tags,
 		Sensitive: full.Sensitive,
@@ -115,12 +123,19 @@ func VisibleMemories(memories []*storage.Memory, showSensitive bool) []*storage.
 	return out
 }
 
+// Replacement swaps one occurrence of Find for With inside the body.
+type Replacement struct {
+	Find string
+	With string
+}
+
 // Patch lists the fields an update replaces. A field left nil keeps its value.
 type Patch struct {
 	Title     *string
 	Content   *string
 	Tags      *[]string
 	Sensitive *bool
+	Replace   *Replacement
 }
 
 // AppendBody joins an addition to a stored body, separated by exactly one
@@ -130,6 +145,24 @@ func AppendBody(current, addition string) string {
 		current += "\n"
 	}
 	return current + addition
+}
+
+// countOccurrences counts every match, including the ones that overlap, so a
+// needle that repeats inside itself cannot pass for a single hit.
+func countOccurrences(text, find string) int {
+	if find == "" {
+		return 0
+	}
+	count := 0
+	for offset := 0; offset <= len(text)-len(find); {
+		index := strings.Index(text[offset:], find)
+		if index < 0 {
+			return count
+		}
+		count++
+		offset += index + 1
+	}
+	return count
 }
 
 // New opens the store under root and keeps the index locked until Close is called.
@@ -166,11 +199,40 @@ func (s *MemoryService) checkOpen() error {
 	return nil
 }
 
+// titleTaken reports the memory that already holds title, ignoring the memory
+// named by id. A second copy of one fact is how two answers start to disagree.
+// A sensitive memory is hidden from this caller, so its title answers nothing
+// here: the check must not turn into a way to confirm a hidden memory exists.
+func (s *MemoryService) titleTaken(id, title string) (*storage.Memory, error) {
+	memories, err := s.reader.List()
+	if err != nil {
+		return nil, err
+	}
+	for _, existing := range memories {
+		if existing.ID == id || existing.Sensitive {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(existing.Title), strings.TrimSpace(title)) {
+			return existing, nil
+		}
+	}
+	return nil, nil
+}
+
 // Create stores a new memory. The file is written first, so an index failure
-// leaves a memory that still exists and can be made searchable again later.
+// leaves a memory that still exists and can be made searchable again later. A
+// title already in the store is refused, because a second copy of the same fact
+// is how two answers start to disagree.
 func (s *MemoryService) Create(title, content string, tags []string, sensitive bool) (*storage.Memory, error) {
 	if err := s.checkOpen(); err != nil {
 		return nil, err
+	}
+	taken, err := s.titleTaken("", title)
+	if err != nil {
+		return nil, err
+	}
+	if taken != nil {
+		return nil, fmt.Errorf("memory %q holds the title %q; update it instead", taken.ID, taken.Title)
 	}
 	m, err := s.writer.Create(title, content, tags, sensitive)
 	if err != nil {
@@ -277,16 +339,41 @@ func (s *MemoryService) Update(id string, patch Patch) (*storage.Memory, error) 
 	if err := s.checkOpen(); err != nil {
 		return nil, err
 	}
+	if patch.Content != nil && patch.Replace != nil {
+		return nil, errors.New("update takes content or a replacement, not both")
+	}
 	m, err := s.reader.Get(id)
 	if err != nil {
 		return nil, err
 	}
 
 	if patch.Title != nil {
-		m.Title = strings.TrimSpace(*patch.Title)
+		title := strings.TrimSpace(*patch.Title)
+		// Echoing the stored title back must stay possible, even when another
+		// memory already shares it.
+		if !strings.EqualFold(title, m.Title) {
+			taken, err := s.titleTaken(m.ID, title)
+			if err != nil {
+				return nil, err
+			}
+			if taken != nil {
+				return nil, fmt.Errorf("memory %q already uses the title %q", taken.ID, taken.Title)
+			}
+		}
+		m.Title = title
 	}
 	if patch.Content != nil {
 		m.Content = *patch.Content
+	}
+	if patch.Replace != nil {
+		if patch.Replace.Find == "" {
+			return nil, errors.New("replacement text is empty")
+		}
+		count := countOccurrences(m.Content, patch.Replace.Find)
+		if count != 1 {
+			return nil, fmt.Errorf("replacement text appears %d times, want exactly one", count)
+		}
+		m.Content = strings.Replace(m.Content, patch.Replace.Find, patch.Replace.With, 1)
 	}
 	if patch.Tags != nil {
 		m.Tags = storage.NormalizeTags(*patch.Tags)

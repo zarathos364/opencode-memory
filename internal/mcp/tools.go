@@ -41,7 +41,7 @@ func toolDefinitions() []definition {
 			Description: "Find memories by their text, best matches first. A result marked weak matched only part of the query, and an empty list means nothing matched. A result carries the title and tags, not the body.",
 			InputSchema: schema([]string{"query"}, map[string]any{
 				"query": map[string]any{"type": "string", "description": "Search query."},
-				"limit": map[string]any{"type": "integer", "description": "Maximum number of results."},
+				"limit": map[string]any{"type": "integer", "description": "Maximum number of results; zero or less uses the default."},
 			}),
 		},
 		{
@@ -65,6 +65,8 @@ func toolDefinitions() []definition {
 				"id":        map[string]any{"type": "string", "description": "Memory identifier."},
 				"content":   map[string]any{"type": "string", "description": "Replace the body."},
 				"append":    map[string]any{"type": "string", "description": "Add text to the end of the body."},
+				"replace":   map[string]any{"type": "string", "description": "Text inside the body to replace; use with."},
+				"with":      map[string]any{"type": "string", "description": "Replacement text for replace."},
 				"title":     map[string]any{"type": "string", "description": "Replace the title."},
 				"tags":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Replace the tags."},
 				"sensitive": map[string]any{"type": "boolean", "description": "Replace the sensitive flag."},
@@ -247,15 +249,26 @@ func (s *Server) toolUpdate(args map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	find, hasFind, err := optString(args, "replace")
+	if err != nil {
+		return nil, err
+	}
+	substitute, hasSubstitute, err := optString(args, "with")
+	if err != nil {
+		return nil, err
+	}
+	if hasFind != hasSubstitute {
+		return nil, fmt.Errorf("update needs replace and with together")
+	}
 	// One body source per call, like the CLI.
 	sources := 0
-	for _, has := range []bool{hasContent, hasAppend} {
+	for _, has := range []bool{hasContent, hasAppend, hasFind} {
 		if has {
 			sources++
 		}
 	}
 	if sources > 1 {
-		return nil, fmt.Errorf("update takes one of content or append, not several")
+		return nil, fmt.Errorf("update takes one of content, append or replace, not several")
 	}
 	if hasAppend && strings.TrimSpace(addition) == "" {
 		return nil, fmt.Errorf("update append holds no text")
@@ -289,6 +302,9 @@ func (s *Server) toolUpdate(args map[string]any) (any, error) {
 	}
 	if hasContent {
 		patch.Content = &content
+	}
+	if hasFind {
+		patch.Replace = &service.Replacement{Find: find, With: substitute}
 	}
 
 	return s.withStore(func(svc *service.MemoryService) (any, error) {
@@ -335,8 +351,11 @@ func (s *Server) toolReindex(_ map[string]any) (any, error) {
 func reqString(tool string, args map[string]any, name string) (string, error) {
 	value, ok := args[name]
 	text, isString := value.(string)
-	if !ok || !isString || strings.TrimSpace(text) == "" {
+	if !ok || !isString {
 		return "", fmt.Errorf("%s needs %q", tool, name)
+	}
+	if strings.TrimSpace(text) == "" {
+		return "", fmt.Errorf("%s needs text in %q", tool, name)
 	}
 	return text, nil
 }

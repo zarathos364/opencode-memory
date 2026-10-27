@@ -542,6 +542,42 @@ func TestUpdateAppendsTextToTheBody(t *testing.T) {
 	}
 }
 
+func TestUpdateReplacesTextThroughTheCLI(t *testing.T) {
+	root := t.TempDir()
+	created := call(rooted(root, "add", "--title", "Editable memory", "alpha beta gamma")...)
+	if created.err != nil {
+		t.Fatalf("add returned error: %v (%s)", created.err, created.errOut)
+	}
+	id := strings.TrimSpace(created.out)
+
+	updated := call(rooted(root, "update", id, "--replace", "beta", "--with", "BETA")...)
+	if updated.err != nil {
+		t.Fatalf("update returned error: %v (%s)", updated.err, updated.errOut)
+	}
+
+	shown := call(rooted(root, "get", id, "--json")...)
+	if shown.err != nil {
+		t.Fatalf("get returned error: %v (%s)", shown.err, shown.errOut)
+	}
+	var one service.MemoryJSON
+	if err := json.Unmarshal([]byte(shown.out), &one); err != nil {
+		t.Fatalf("get did not print JSON: %v\n%s", err, shown.out)
+	}
+	if one.Content != "alpha BETA gamma" {
+		t.Errorf("content = %q, want %q", one.Content, "alpha BETA gamma")
+	}
+	if one.UpdatedAt == one.CreatedAt {
+		t.Errorf("the update time %q did not move", one.UpdatedAt)
+	}
+
+	half := call(rooted(root, "update", id, "--replace", "beta")...)
+	if half.err == nil {
+		t.Error("update with only --replace returned no error")
+	} else if !strings.Contains(half.err.Error(), "--with") {
+		t.Errorf("the refusal %q does not name --with", half.err)
+	}
+}
+
 func TestUpdateAppendSeparatesWithOneNewline(t *testing.T) {
 	cases := map[string]struct {
 		old      string

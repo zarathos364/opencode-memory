@@ -15,17 +15,21 @@ tools are `memory_search`, `memory_add` and so on.
   optional `limit`. Every meaningful word must match; a word the index drops,
   such as `the`, does not count. A result that matched only part of the query is
   marked `weak`, and an empty list means nothing matched. Returns `id`,
-  `created_at`, `title`, `tags`, `sensitive`, `score` and `weak`. It does
-  **not** return the body.
+  `created_at`, `updated_at`, `title`, `tags`, `sensitive`, `score` and `weak`.
+  It does **not** return the body.
 - `memory_list` — lists memories, oldest first. Without `sensitive: true`,
   sensitive ones stay out. It does not return the body either.
 - `memory_get` — returns one memory with the whole body. It takes the `id` and
   is the only way to read a stored body.
 - `memory_add` — stores a new record. `title` and `content` are required.
-  `tags` and `sensitive` are optional.
+  `tags` and `sensitive` are optional. A title already held by a visible memory
+  is refused, and the message names the memory to update instead.
 - `memory_update` — changes an existing record. It takes the `id` and a patch:
-  `content` replaces the body, `append` adds text at the end, and `title`,
-  `tags` and `sensitive` replace the fields. One call takes one body source.
+  `content` replaces the body, `append` adds text at the end, `replace` with
+  `with` swaps one passage, and `title`, `tags` and `sensitive` replace the
+  fields. One call takes one body source. A replacement counts as one, with
+  `replace` and `with` together, and it is refused when the text appears zero or
+  several times.
 - `memory_delete` — removes a memory. It takes the `id`.
 - `memory_reindex` — rebuilds the index from the stored files.
 
@@ -52,6 +56,8 @@ whether the write happens. All of these must hold before `memory_add` or
 - A memory marked `sensitive` never appears in search. `get` returns its body.
   `list` with `sensitive: true` returns its summary, and `add` and `update`
   return the record they just changed.
+- A query that names a field, such as `tags:go`, searches that field only, and
+  it never carries `weak`.
 - `sensitive` hides a record from search. It is not encryption. Never store a
   secret in a sensitive memory.
 - Without the `memory_*` tools, use the CLI: `opencode-memory search --json`,

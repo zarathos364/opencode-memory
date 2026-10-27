@@ -47,6 +47,45 @@ func TestCreateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAFileWithoutAnUpdateTimeReadsAsCreated(t *testing.T) {
+	raw := filepath.Join(t.TempDir(), "raw")
+	if err := os.MkdirAll(raw, 0o755); err != nil {
+		t.Fatalf("creating the raw directory failed: %v", err)
+	}
+	const id = "0192f0c1-0000-7000-8000-000000000000"
+	file := "---\nschema_version: 1\nid: " + id +
+		"\ncreated_at: \"2026-10-11T12:00:00Z\"\ntags: []\nsensitive: false\ntitle: legacy\n---\n\nbody text\n"
+	if err := os.WriteFile(filepath.Join(raw, id+".md"), []byte(file), 0o600); err != nil {
+		t.Fatalf("writing the legacy file failed: %v", err)
+	}
+
+	m, err := NewReader(raw).Get(id)
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if !m.UpdatedAt.Equal(m.CreatedAt) {
+		t.Errorf("UpdatedAt = %v, want the creation time %v", m.UpdatedAt, m.CreatedAt)
+	}
+}
+
+func TestGetRefusesAHeaderThatDisagreesWithItsFileName(t *testing.T) {
+	raw := filepath.Join(t.TempDir(), "raw")
+	if err := os.MkdirAll(raw, 0o755); err != nil {
+		t.Fatalf("creating the raw directory failed: %v", err)
+	}
+	const name = "0192f0c1-0000-7000-8000-000000000000"
+	const other = "0192f0c1-1111-7000-8000-000000000000"
+	file := "---\nschema_version: 1\nid: " + other +
+		"\ncreated_at: \"2026-10-11T12:00:00Z\"\ntags: []\nsensitive: false\ntitle: moved\n---\n\nbody text\n"
+	if err := os.WriteFile(filepath.Join(raw, name+".md"), []byte(file), 0o600); err != nil {
+		t.Fatalf("writing the file failed: %v", err)
+	}
+
+	if _, err := NewReader(raw).Get(name); err == nil {
+		t.Error("Get returned nil error for a file whose header names another id")
+	}
+}
+
 func TestCreatedFileIsHumanReadable(t *testing.T) {
 	w, r := newStore(t)
 

@@ -227,6 +227,8 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 	contentFrom := flags.String("content-from", "", "read the new body from a file")
 	appendText := flags.String("append", "", "add text to the end of the body")
 	appendFrom := flags.String("append-from", "", "add the end of the body from a file")
+	replaceText := flags.String("replace", "", "replace this text inside the body")
+	withText := flags.String("with", "", "put this text in its place")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
@@ -251,6 +253,23 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 	}
 	if (set["append"] || set["append-from"]) && *contentFrom != "" {
 		return errors.New("update takes --content-from or an addition, not both")
+	}
+	// A replacement needs both halves, and it replaces the body as a whole, so
+	// it cannot travel with another body source.
+	if set["replace"] != set["with"] {
+		return errors.New("update needs --replace and --with together")
+	}
+	replacing := set["replace"] && set["with"]
+	if replacing {
+		if strings.TrimSpace(*replaceText) == "" {
+			return errors.New("update --replace holds no text")
+		}
+		if set["append"] || set["append-from"] {
+			return errors.New("update takes --replace or an addition, not both")
+		}
+		if *contentFrom != "" || flags.NArg() > 1 {
+			return errors.New("update takes --replace or new text, not both")
+		}
 	}
 
 	patch := service.Patch{}
@@ -292,8 +311,11 @@ func runUpdate(args []string, out, errOut io.Writer) error {
 		}
 		addition = text
 	}
-	if patch.Title == nil && patch.Content == nil && patch.Tags == nil && patch.Sensitive == nil && addition == "" {
-		return errors.New("update needs --title, --tags, --sensitive, --content-from, --append, --append-from or new text")
+	if patch.Title == nil && patch.Content == nil && patch.Tags == nil && patch.Sensitive == nil && addition == "" && !replacing {
+		return errors.New("update needs --title, --tags, --sensitive, --content-from, --append, --append-from, --replace with --with or new text")
+	}
+	if replacing {
+		patch.Replace = &service.Replacement{Find: *replaceText, With: *withText}
 	}
 
 	return withService(*root, func(svc *service.MemoryService) error {

@@ -23,10 +23,12 @@ func NewWriter(rawDir string) *Writer {
 // temporary name and renamed only once its content is complete, so a reader never
 // observes a half written memory and an interrupted run leaves no broken file.
 func (w *Writer) Create(title, content string, tags []string, sensitive bool) (*Memory, error) {
+	now := time.Now().UTC()
 	m := &Memory{
 		SchemaVersion: SchemaVersion,
 		ID:            uuid.NewV7().String(),
-		CreatedAt:     time.Now().UTC(),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 		Tags:          NormalizeTags(tags),
 		Sensitive:     sensitive,
 		Title:         strings.TrimSpace(title),
@@ -38,7 +40,19 @@ func (w *Writer) Create(title, content string, tags []string, sensitive bool) (*
 	return m, nil
 }
 
+// Replace rewrites a stored memory and moves its update time forward, so a
+// reader can tell a refreshed memory from one that predates a decision. The
+// time never moves backwards: a clock that steps back keeps the previous value.
 func (w *Writer) Replace(m *Memory) error {
+	now := time.Now().UTC()
+	floor := m.CreatedAt
+	if m.UpdatedAt.After(floor) {
+		floor = m.UpdatedAt
+	}
+	if now.Before(floor) {
+		now = floor
+	}
+	m.UpdatedAt = now
 	return w.store(m)
 }
 

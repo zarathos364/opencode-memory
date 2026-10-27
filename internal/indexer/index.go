@@ -29,7 +29,8 @@ type Hit struct {
 }
 
 type Index struct {
-	index bleve.Index
+	index   bleve.Index
+	mapping mapping.IndexMapping
 }
 
 // LockError reports that another process already holds the index directory.
@@ -61,11 +62,13 @@ func Open(dir string) (*Index, error) {
 	path := filepath.Join(dir, "index.bleve")
 
 	var (
-		index bleve.Index
-		err   error
+		index       bleve.Index
+		definitions mapping.IndexMapping
+		err         error
 	)
 	if _, statErr := os.Stat(path); errors.Is(statErr, fs.ErrNotExist) {
-		index, err = bleve.New(path, newIndexMapping())
+		definitions = newIndexMapping()
+		index, err = bleve.New(path, definitions)
 	} else {
 		index, err = bleve.Open(path)
 	}
@@ -75,7 +78,10 @@ func Open(dir string) (*Index, error) {
 		}
 		return nil, fmt.Errorf("open index: %w", err)
 	}
-	return &Index{index: index}, nil
+	if definitions == nil {
+		definitions = index.Mapping()
+	}
+	return &Index{index: index, mapping: definitions}, nil
 }
 
 func (i *Index) Close() error {

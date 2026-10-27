@@ -12,8 +12,11 @@ tools are `memory_search`, `memory_add` and so on.
 ## Tools
 
 - `memory_search` — search by text, best matches first. Takes `query` and an
-  optional `limit`. Returns `id`, `created_at`, `title`, `tags`, `sensitive`
-  and `score`. It does **not** return the body.
+  optional `limit`. Every meaningful word must match; a word the index drops,
+  such as `the`, does not count. A result that matched only part of the query is
+  marked `weak`, and an empty list means nothing matched. Returns `id`,
+  `created_at`, `title`, `tags`, `sensitive`, `score` and `weak`. It does
+  **not** return the body.
 - `memory_list` — lists memories, oldest first. Without `sensitive: true`,
   sensitive ones stay out. It does not return the body either.
 - `memory_get` — returns one memory with the whole body. It takes the `id` and

@@ -17,8 +17,8 @@ func (i *Index) Index(doc Document) error {
 	return nil
 }
 
-// Delete removes one document. Removing a document that is not stored is not an
-// error, because that is the state callers already want.
+// Removing a document that is not stored is not an error, because that is the
+// state callers already want.
 func (i *Index) Delete(id string) error {
 	if err := i.index.Delete(id); err != nil {
 		return fmt.Errorf("remove document %q: %w", id, err)

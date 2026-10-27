@@ -25,6 +25,7 @@ type MemoryService struct {
 type Result struct {
 	Memory *storage.Memory
 	Score  float64
+	Weak   bool
 }
 
 // MemoryJSON is one memory as data, for CLI output and tool results alike.
@@ -66,6 +67,8 @@ type MemorySummary struct {
 	Tags      []string `json:"tags"`
 	Sensitive bool     `json:"sensitive"`
 	Score     float64  `json:"score,omitempty"`
+	// Weak marks a partial match, so a ranked list cannot pass for an answer.
+	Weak bool `json:"weak,omitempty"`
 }
 
 // NewMemorySummary renders a memory without its body. It starts from the full
@@ -91,16 +94,16 @@ func NewMemorySummaryList(memories []*storage.Memory) []MemorySummary {
 	return out
 }
 
-// NewMemorySummaryResults renders search results with their scores.
 func NewMemorySummaryResults(results []Result) []MemorySummary {
 	out := make([]MemorySummary, 0, len(results))
 	for _, result := range results {
-		out = append(out, NewMemorySummary(result.Memory, result.Score))
+		summary := NewMemorySummary(result.Memory, result.Score)
+		summary.Weak = result.Weak
+		out = append(out, summary)
 	}
 	return out
 }
 
-// VisibleMemories drops sensitive memories unless they were asked for.
 func VisibleMemories(memories []*storage.Memory, showSensitive bool) []*storage.Memory {
 	out := make([]*storage.Memory, 0, len(memories))
 	for _, m := range memories {
@@ -193,14 +196,46 @@ func (s *MemoryService) List() ([]*storage.Memory, error) {
 	return s.reader.List()
 }
 
-// Search returns the best matches, strongest first. A hit whose file is gone is
-// skipped, because a stale index entry must not fail the whole search, and a hit
-// whose memory is now sensitive is skipped too, so a stale entry cannot leak it.
+// Search returns the best matches, strongest first. The strict pass comes first:
+// it keeps only memories that hold every meaningful term, so a complete match
+// outranks a partial one. When the strict pass leaves nothing to show, the loose
+// pass returns the partial matches, and every result carries Weak. A hit whose
+// file is gone is skipped, because a stale index entry must not fail the whole
+// search, and a hit whose memory is now sensitive is skipped too, so a stale
+// entry cannot leak it. Query-string input keeps its own meaning, so it runs the
+// loose pass only and carries no Weak mark.
 func (s *MemoryService) Search(query string, limit int) ([]Result, error) {
 	if err := s.checkOpen(); err != nil {
 		return nil, err
 	}
-	hits, err := s.index.Search(query, limit)
+
+	field := indexer.IsFieldQuery(query)
+	if !field {
+		strict, err := s.lookup(query, limit, s.index.SearchAll)
+		if err != nil {
+			return nil, err
+		}
+		if len(strict) > 0 {
+			return strict, nil
+		}
+	}
+
+	loose, err := s.lookup(query, limit, s.index.Search)
+	if err != nil {
+		return nil, err
+	}
+	if !field {
+		for i := range loose {
+			loose[i].Weak = true
+		}
+	}
+	return loose, nil
+}
+
+// lookup runs one pass and resolves its hits, skipping entries that no longer
+// describe a readable memory.
+func (s *MemoryService) lookup(query string, limit int, pass func(string, int) ([]indexer.Hit, error)) ([]Result, error) {
+	hits, err := pass(query, limit)
 	if err != nil {
 		return nil, err
 	}

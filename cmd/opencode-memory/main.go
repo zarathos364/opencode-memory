@@ -147,7 +147,11 @@ func runSearch(args []string, out, errOut io.Writer) error {
 			return writeJSON(out, service.NewMemorySummaryResults(results))
 		}
 		for _, result := range results {
-			err := printLine(out, "score=%.4f  id=%s  %s\n", result.Score, result.Memory.ID, result.Memory.Title)
+			marker := ""
+			if result.Weak {
+				marker = "weak  "
+			}
+			err := printLine(out, "%sscore=%.4f  id=%s  %s\n", marker, result.Score, result.Memory.ID, result.Memory.Title)
 			if err != nil {
 				return err
 			}

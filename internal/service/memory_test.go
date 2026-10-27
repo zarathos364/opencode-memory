@@ -54,6 +54,95 @@ func TestCreateThenSearchFindsTheMemory(t *testing.T) {
 	}
 }
 
+func TestSearchPrefersTheCompleteMatch(t *testing.T) {
+	svc, _ := newService(t)
+
+	if _, err := svc.Create("shell access", "the shell is allowed on this machine", nil, false); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if _, err := svc.Create("shell notes", "notes about the shell", nil, false); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	complete, err := svc.Search("shell allowed", 10)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(complete) != 1 {
+		t.Fatalf("Search returned %d results, want the complete match only", len(complete))
+	}
+	if complete[0].Memory.Title != "shell access" {
+		t.Errorf("result title = %q, want %q", complete[0].Memory.Title, "shell access")
+	}
+	if complete[0].Weak {
+		t.Errorf("a result that matched every word is marked weak")
+	}
+
+	withStopword, err := svc.Search("the shell allowed", 10)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(withStopword) != 1 {
+		t.Fatalf("Search with a common word returned %d results, want 1", len(withStopword))
+	}
+	if withStopword[0].Weak {
+		t.Errorf("a common word turned a complete match into a weak one")
+	}
+}
+
+func TestSearchMarksPartialMatchesAsWeak(t *testing.T) {
+	svc, _ := newService(t)
+
+	if _, err := svc.Create("shell notes", "notes about the shell", nil, false); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	partial, err := svc.Search("shell command denied", 10)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(partial) != 1 {
+		t.Fatalf("Search returned %d results, want 1", len(partial))
+	}
+	if !partial[0].Weak {
+		t.Errorf("a result that matched part of the query is not marked weak")
+	}
+
+	summaries := NewMemorySummaryResults(partial)
+	if len(summaries) != 1 || !summaries[0].Weak {
+		t.Errorf("the summary does not carry the weak mark")
+	}
+}
+
+func TestSearchFallsBackWhenTheStrictHitIsGone(t *testing.T) {
+	svc, root := newService(t)
+
+	complete, err := svc.Create("shell access", "the shell is allowed", nil, false)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if _, err := svc.Create("shell notes", "notes about the shell", nil, false); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if err := os.Remove(filepath.Join(storage.RawDir(root), complete.ID+".md")); err != nil {
+		t.Fatalf("removing the file failed: %v", err)
+	}
+
+	results, err := svc.Search("shell allowed", 10)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Search returned %d results, want the live partial match", len(results))
+	}
+	if results[0].Memory.Title != "shell notes" {
+		t.Errorf("result title = %q, want %q", results[0].Memory.Title, "shell notes")
+	}
+	if !results[0].Weak {
+		t.Errorf("the fallback result is not marked weak")
+	}
+}
+
 func TestDeleteRemovesTheMemoryFromSearch(t *testing.T) {
 	svc, _ := newService(t)
 

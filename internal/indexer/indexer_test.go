@@ -59,6 +59,62 @@ func TestSearchRanksATitleMatchAboveABodyMatch(t *testing.T) {
 	}
 }
 
+func TestSearchAllRequiresEveryTerm(t *testing.T) {
+	index := newTestIndex(t)
+
+	for _, doc := range []Document{
+		sampleDocument("both", "shell command denied", "the command was denied by the shell"),
+		sampleDocument("across", "shell access", "the command needs it"),
+		sampleDocument("one", "shell access", "the shell is allowed"),
+	} {
+		if err := index.Index(doc); err != nil {
+			t.Fatalf("Index returned error: %v", err)
+		}
+	}
+
+	strict, err := index.SearchAll("shell command", 10)
+	if err != nil {
+		t.Fatalf("SearchAll returned error: %v", err)
+	}
+	if !holdsExactly(strict, "both", "across") {
+		t.Fatalf("SearchAll returned %v, want the memories holding both terms, across fields too", strict)
+	}
+
+	// A common word carries no term, so it cannot make the strict pass empty.
+	withStopword, err := index.SearchAll("shell the command", 10)
+	if err != nil {
+		t.Fatalf("SearchAll returned error: %v", err)
+	}
+	if !holdsExactly(withStopword, "both", "across") {
+		t.Fatalf("SearchAll with a common word returned %v, want the same two memories", withStopword)
+	}
+
+	loose, err := index.Search("shell command", 10)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(loose) != 3 {
+		t.Fatalf("Search returned %d hits, want 3", len(loose))
+	}
+}
+
+// holdsExactly reports whether the hits name exactly these identifiers.
+func holdsExactly(hits []Hit, ids ...string) bool {
+	if len(hits) != len(ids) {
+		return false
+	}
+	seen := make(map[string]bool, len(hits))
+	for _, hit := range hits {
+		seen[hit.ID] = true
+	}
+	for _, id := range ids {
+		if !seen[id] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestTagSearchIsExactAndDoesNotStem(t *testing.T) {
 	index := newTestIndex(t)
 

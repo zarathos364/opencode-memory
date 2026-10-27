@@ -124,7 +124,11 @@ Tags are trimmed, lowercased and de-duplicated before they are stored.
 
 ### search
 
-Find memories by text. Hits are returned strongest first. A JSON hit carries
+Find memories by text. Every meaningful word must match for a full hit, and full
+hits are returned strongest first. A word the index drops, such as `the`, does
+not count. When no memory holds every meaningful word, the best partial matches
+come back marked weak. The text output adds a `weak` prefix, the JSON carries
+`"weak": true`, and an empty result means nothing matched. A JSON hit carries
 the title and tags, not the body. Use `get` to read one.
 
 ```sh

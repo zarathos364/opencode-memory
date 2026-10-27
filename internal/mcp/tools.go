@@ -38,7 +38,7 @@ func toolDefinitions() []definition {
 		},
 		{
 			Name:        "search",
-			Description: "Find memories by their text, best matches first. A result carries the title and tags, not the body.",
+			Description: "Find memories by their text, best matches first. A result marked weak matched only part of the query, and an empty list means nothing matched. A result carries the title and tags, not the body.",
 			InputSchema: schema([]string{"query"}, map[string]any{
 				"query": map[string]any{"type": "string", "description": "Search query."},
 				"limit": map[string]any{"type": "integer", "description": "Maximum number of results."},

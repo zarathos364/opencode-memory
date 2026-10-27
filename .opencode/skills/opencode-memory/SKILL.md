@@ -57,7 +57,9 @@ whether the write happens. All of these must hold before `memory_add` or
   `list` with `sensitive: true` returns its summary, and `add` and `update`
   return the record they just changed.
 - A query that names a field, such as `tags:go`, searches that field only, and
-  it never carries `weak`.
+  every hit carries `weak: false`.
+- Matching is literal after lowercasing. A plural and a singular are different
+  words, so `module` does not match `modules` and the hit comes back weak.
 - `sensitive` hides a record from search. It is not encryption. Never store a
   secret in a sensitive memory.
 - Without the `memory_*` tools, use the CLI: `opencode-memory search --json`,

@@ -31,9 +31,10 @@ Commands:
   reindex   rebuild the index from the stored files
   serve     expose the store to agents over MCP
 
-Every command accepts --root DIR to pick the store; otherwise the store is
-resolved automatically, falling back to the shared store. Pass -- before text
-that starts with a dash, so the text is not read as a flag.
+Every command accepts --root DIR after the command name to pick the store;
+otherwise the store is resolved automatically, falling back to the shared
+store. Pass -- before text that starts with a dash, so the text is not read as
+a flag.
 
 Run 'opencode-memory COMMAND --help' to see that command's options.
 

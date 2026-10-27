@@ -112,7 +112,9 @@ Flags work before or after the positional arguments.
 
 ### add
 
-`--title` and the memory text are required. Prints the new memory's id.
+`--title` and the memory text are required. Prints the new memory's id. A title
+already in the store is refused, and the message names the memory to update
+instead.
 
 ```sh
 $ opencode-memory add --title "Go module layout" --tags go,arch \
@@ -126,10 +128,11 @@ Tags are trimmed, lowercased and de-duplicated before they are stored.
 
 Find memories by text. Every meaningful word must match for a full hit, and full
 hits are returned strongest first. A word the index drops, such as `the`, does
-not count. When no memory holds every meaningful word, the best partial matches
-come back marked weak. The text output adds a `weak` prefix, the JSON carries
-`"weak": true`, and an empty result means nothing matched. A JSON hit carries
-the title and tags, not the body. Use `get` to read one.
+not count, and matching is literal after lowercasing: `module` does not match
+`modules`. When no memory holds every meaningful word, the best partial matches
+come back marked weak. The text output adds a `weak` prefix, the JSON states
+`weak` as true or false, and an empty result means nothing matched. A JSON hit
+carries the title and tags, not the body. Use `get` to read one.
 
 ```sh
 $ opencode-memory search "module layout"
@@ -142,13 +145,15 @@ $ opencode-memory search --json "module layout"
   {
     "id": "01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47",
     "created_at": "2026-10-11T12:00:00.123456789Z",
+    "updated_at": "2026-10-11T12:00:00.123456789Z",
     "title": "Go module layout",
     "tags": [
       "go",
       "arch"
     ],
     "sensitive": false,
-    "score": 1.2837
+    "score": 1.2837,
+    "weak": false
   }
 ]
 ```
@@ -181,12 +186,20 @@ Keep cmd thin and put logic in internal packages.
 ### update
 
 Rewrite a memory while keeping its id and creation time. Pass `--title`,
-`--tags` or `--sensitive` to replace those fields, and extra positional text to
-replace the body.
+`--tags` or `--sensitive` to replace those fields, extra positional text to
+replace the body, and `--replace OLD --with NEW` to swap one passage without
+resending the body. A replacement refuses text that appears zero or several
+times, so it cannot hit the wrong line. The update time moves on every write.
 
 ```sh
 $ opencode-memory update 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47 \
     --tags go,testing "Keep cmd thin, put logic in internal packages, cover it with tests."
+01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
+```
+
+```sh
+$ opencode-memory update 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47 \
+    --replace "cover it with tests" --with "and test it"
 01a12ad5-8a7b-7c3b-9a10-2f6d8e5b1c47
 ```
 
@@ -353,6 +366,7 @@ its own memory.
 | `the search index is out of sync` (warning)    | The index no longer matches the files. Run `opencode-memory reindex`.                |
 | A memory is on disk but not found by `search`  | It is marked sensitive, or the index drifted. Check with `list --sensitive`, then `reindex`. |
 | `root from ... is not usable`                  | An explicit `--root` or `OPENCODE_MEMORY_ROOT` points to a missing path.             |
+| A new behaviour does not appear                | The `opencode-memory` on the path is stale, or the running MCP server started from the old binary and a new session keeps it. Run `make install`, then `opencode service restart`. |
 
 ## Development
 
